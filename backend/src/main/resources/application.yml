@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: daily-recap-backend
+
+recap:
+  storage-root: data
+  provider: wencai
+  python-executable: python
+  collector-script: scripts/collect_wencai.py
+  wencai-cookie: ${WENCAI_COOKIE:}
+  sleep-seconds: 1.2
