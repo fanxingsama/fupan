@@ -1,0 +1,38 @@
+{
+  "groups": [
+    {
+      "name": "recap",
+      "type": "com.meirifupan.backend.config.RecapProperties",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "recap.collector-script",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    },
+    {
+      "name": "recap.provider",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    },
+    {
+      "name": "recap.python-executable",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    },
+    {
+      "name": "recap.sleep-seconds",
+      "type": "java.lang.Double",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties",
+      "defaultValue": 0
+    },
+    {
+      "name": "recap.storage-root",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    }
+  ],
+  "hints": []
+}

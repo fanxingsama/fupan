@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "echarts": "^6.0.0",
     "vue": "^2.7.16"
   },
   "devDependencies": {

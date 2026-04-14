@@ -1,0 +1,16 @@
+com\meirifupan\backend\config\RecapConfig.class
+com\meirifupan\backend\provider\AkshareMarketRecapProvider.class
+com\meirifupan\backend\service\RecapCaptureService.class
+com\meirifupan\backend\service\RecapStorageService.class
+META-INF\spring-configuration-metadata.json
+com\meirifupan\backend\model\DailyRecapReport.class
+com\meirifupan\backend\model\RecapListItem.class
+com\meirifupan\backend\controller\RecapController.class
+com\meirifupan\backend\provider\MockMarketRecapProvider.class
+com\meirifupan\backend\model\SectorRecord.class
+com\meirifupan\backend\DailyRecapApplication.class
+com\meirifupan\backend\provider\MarketRecapProvider.class
+com\meirifupan\backend\model\CaptureRequest.class
+com\meirifupan\backend\model\MarketStats.class
+com\meirifupan\backend\model\StockRecord.class
+com\meirifupan\backend\config\RecapProperties.class

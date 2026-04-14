@@ -8,7 +8,6 @@ public record RecapProperties(
         String provider,
         String pythonExecutable,
         String collectorScript,
-        String wencaiCookie,
         double sleepSeconds
 ) {
 }

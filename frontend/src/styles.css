@@ -2,8 +2,9 @@
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   color: #14213d;
   background:
-    radial-gradient(circle at top left, rgba(255, 214, 10, 0.35), transparent 30%),
-    linear-gradient(135deg, #fffaf0 0%, #edf6f9 50%, #f8f9fa 100%);
+    radial-gradient(circle at top left, rgba(250, 204, 21, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 26%),
+    linear-gradient(135deg, #fbfbf7 0%, #f7fafc 52%, #f8fafc 100%);
   line-height: 1.5;
   font-weight: 400;
   color-scheme: light;
@@ -30,7 +31,7 @@ button {
   cursor: pointer;
   background: #14213d;
   color: white;
-  transition: transform 180ms ease, opacity 180ms ease;
+  transition: transform 180ms ease, opacity 180ms ease, background 180ms ease, color 180ms ease;
 }
 
 button:hover {
@@ -46,25 +47,29 @@ input {
   width: 100%;
   border-radius: 16px;
   border: 1px solid rgba(20, 33, 61, 0.12);
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.8);
   padding: 0.9rem 1rem;
 }
 
 .page-shell {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 340px 1fr;
   min-height: 100vh;
 }
 
 .sidebar {
   padding: 2rem 1.25rem;
   border-right: 1px solid rgba(20, 33, 61, 0.08);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(18px);
 }
 
 .content {
   padding: 2rem;
+}
+
+.brand-block {
+  margin-bottom: 1rem;
 }
 
 .eyebrow {
@@ -86,11 +91,12 @@ h2 {
 
 .panel,
 .hero-card,
-.summary-card {
+.summary-card,
+.chart-panel {
   border: 1px solid rgba(20, 33, 61, 0.08);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 18px 48px rgba(20, 33, 61, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
 }
 
 .panel {
@@ -99,19 +105,24 @@ h2 {
 }
 
 .hero-card {
-  padding: 1.5rem;
+  padding: 1.6rem;
   display: grid;
   gap: 1.2rem;
 }
 
+.hero-copy {
+  max-width: 900px;
+}
+
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
 }
 
 .summary-card {
   padding: 1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
 }
 
 .summary-card span {
@@ -131,6 +142,21 @@ h2 {
   color: #52606d;
 }
 
+.controls-panel {
+  margin-top: 0;
+}
+
+.panel-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.panel-title small,
+.calendar-head small {
+  color: #64748b;
+}
+
 .actions {
   display: flex;
   gap: 0.75rem;
@@ -142,35 +168,175 @@ h2 {
   color: #14213d;
 }
 
-.history-list,
+.view-list,
 .sector-list {
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
 }
 
-.history-item {
+.view-button {
   width: 100%;
-  margin-top: 0.65rem;
+  border-radius: 18px;
   background: #f4f7fb;
   color: #14213d;
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
+  align-items: center;
   text-align: left;
 }
 
-.history-item small,
-.sector-list small {
+.view-button span,
+.view-button small {
   display: block;
-  color: #52606d;
 }
 
-.sector-layout {
+.view-button small,
+.sector-list small {
+  color: #64748b;
+}
+
+.view-button.active {
+  background: #14213d;
+  color: #fff;
+}
+
+.view-button.active small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.calendar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.calendar-nav {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.nav-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #14213d;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.week-row {
+  margin-bottom: 0.45rem;
+}
+
+.week-label {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.calendar-cell {
+  min-height: 64px;
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #14213d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem;
+  position: relative;
+}
+
+.calendar-cell:hover {
+  transform: none;
+}
+
+.calendar-cell.ghosted {
+  opacity: 0.32;
+}
+
+.calendar-cell.available {
+  border: 1px solid rgba(20, 33, 61, 0.08);
+}
+
+.calendar-cell.active {
+  background: #14213d;
+  color: #fff;
+}
+
+.calendar-cell.active small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.calendar-cell:disabled {
+  cursor: default;
+}
+
+.day-number {
+  font-weight: 700;
+}
+
+.calendar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #f59e0b;
+  position: absolute;
+  bottom: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.overview-stack {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.chart-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
-  margin-top: 1.25rem;
+}
+
+.chart-row-hero {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chart-panel {
+  padding: 1.2rem;
+}
+
+.chart-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.8rem;
+}
+
+.chart-panel-head small {
+  color: #64748b;
+}
+
+.chart-panel-head strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.chart-box {
+  width: 100%;
+  height: 320px;
+}
+
+.chart-box-large {
+  height: 340px;
 }
 
 .tag-list {
@@ -221,17 +387,61 @@ th {
   font-weight: 600;
 }
 
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.sort-button:hover {
+  transform: none;
+}
+
+.sort-button.active {
+  color: #14213d;
+}
+
+.sort-arrows {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 0.8;
+  font-size: 0.7rem;
+  color: rgba(82, 96, 109, 0.55);
+}
+
+.sort-arrows .on {
+  color: #14213d;
+}
+
+td.up {
+  color: #d62828;
+  font-weight: 600;
+}
+
+td.down {
+  color: #2a9d8f;
+  font-weight: 600;
+}
+
 .error {
   margin-top: 1rem;
   color: #d62828;
 }
 
-@media (max-width: 1080px) {
-  .page-shell {
+@media (max-width: 1280px) {
+  .chart-row,
+  .chart-row-hero {
     grid-template-columns: 1fr;
   }
+}
 
-  .sector-layout {
+@media (max-width: 1080px) {
+  .page-shell {
     grid-template-columns: 1fr;
   }
 }

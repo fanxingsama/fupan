@@ -14,27 +14,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Component
-public class WencaiMarketRecapProvider implements MarketRecapProvider {
+public class AkshareMarketRecapProvider implements MarketRecapProvider {
 
     private final RecapProperties properties;
     private final ObjectMapper objectMapper;
 
-    public WencaiMarketRecapProvider(RecapProperties properties, ObjectMapper objectMapper) {
+    public AkshareMarketRecapProvider(RecapProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public String name() {
-        return "wencai";
+        return "akshare";
     }
 
     @Override
     public DailyRecapReport capture(LocalDate tradeDate) {
-        if (properties.wencaiCookie() == null || properties.wencaiCookie().isBlank()) {
-            throw new IllegalStateException("Missing WENCAI_COOKIE. Set it before calling capture.");
-        }
-
         Path scriptPath = Path.of(properties.collectorScript()).toAbsolutePath();
         if (!Files.exists(scriptPath)) {
             throw new IllegalStateException("Collector script not found: " + scriptPath);
@@ -42,16 +38,26 @@ public class WencaiMarketRecapProvider implements MarketRecapProvider {
 
         List<String> command = new ArrayList<>();
         command.add(properties.pythonExecutable());
+        command.add("-X");
+        command.add("utf8");
         command.add(scriptPath.toString());
         command.add("--date");
         command.add(tradeDate.toString());
-        command.add("--cookie");
-        command.add(properties.wencaiCookie());
         command.add("--sleep");
         command.add(String.valueOf(properties.sleepSeconds()));
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.directory(scriptPath.getParent().toFile());
+        processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
+        processBuilder.environment().put("PYTHONUTF8", "1");
+        processBuilder.environment().remove("HTTP_PROXY");
+        processBuilder.environment().remove("HTTPS_PROXY");
+        processBuilder.environment().remove("ALL_PROXY");
+        processBuilder.environment().remove("http_proxy");
+        processBuilder.environment().remove("https_proxy");
+        processBuilder.environment().remove("all_proxy");
+        processBuilder.environment().put("NO_PROXY", "*");
+        processBuilder.environment().put("no_proxy", "*");
 
         try {
             Process process = processBuilder.start();

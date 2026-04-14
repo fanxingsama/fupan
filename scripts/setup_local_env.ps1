@@ -9,8 +9,12 @@ $mavenZip = Join-Path $toolsDir "apache-maven-$mavenVersion-bin.zip"
 $mavenHome = Join-Path $toolsDir "apache-maven-$mavenVersion"
 $pythonExe = "python"
 $npmCmd = "npm.cmd"
+$userNodeRoot = Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe") -Directory -Filter "node-v*-win-x64" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
 
-if (-not (Get-Command $npmCmd -ErrorAction SilentlyContinue)) {
+if ($userNodeRoot -and (Test-Path (Join-Path $userNodeRoot.FullName "npm.cmd"))) {
+    $npmCmd = Join-Path $userNodeRoot.FullName "npm.cmd"
+    $env:Path = "$($userNodeRoot.FullName);$env:Path"
+} elseif (-not (Get-Command $npmCmd -ErrorAction SilentlyContinue)) {
     $defaultNpm = "C:\Program Files\nodejs\npm.cmd"
     if (Test-Path $defaultNpm) {
         $npmCmd = $defaultNpm
@@ -37,7 +41,7 @@ try {
         & $pythonExe -m venv .venv
     }
     & ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
-    & ".\.venv\Scripts\python.exe" -m pip install pywencai
+    & ".\.venv\Scripts\python.exe" -m pip install akshare
 } finally {
     Pop-Location
 }
