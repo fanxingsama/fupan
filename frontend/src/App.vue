@@ -289,7 +289,7 @@ const BASE_COLUMNS = {
   reason: { key: 'reason', label: '原因', sortable: true, sortType: 'string' }
 }
 
-// STANDARD_COLUMNS：连板票、首板票、跌停票、10 日涨幅等大多数表格使用的列集合。
+// STANDARD_COLUMNS：不展示“涨停原因”的通用列集合。
 const STANDARD_COLUMNS = [
   BASE_COLUMNS.code,
   BASE_COLUMNS.name,
@@ -298,11 +298,16 @@ const STANDARD_COLUMNS = [
   BASE_COLUMNS.price,
   BASE_COLUMNS.concept,
   BASE_COLUMNS.amount,
-  BASE_COLUMNS.floatMarketValue,
+  BASE_COLUMNS.floatMarketValue
+]
+
+// LIMIT_REASON_COLUMNS：仅“当日首板票 / 当日连板票”展示涨停原因。
+const LIMIT_REASON_COLUMNS = [
+  ...STANDARD_COLUMNS,
   BASE_COLUMNS.reason
 ]
 
-// BROKEN_COLUMNS：炸板票专用列集合 —— 炸板票没有连板高度字段，所以去掉了 boardHeight。
+// BROKEN_COLUMNS：炸板票专用列集合 —— 炸板票没有连板高度字段，也不展示涨停原因。
 const BROKEN_COLUMNS = [
   BASE_COLUMNS.code,
   BASE_COLUMNS.name,
@@ -310,8 +315,7 @@ const BROKEN_COLUMNS = [
   BASE_COLUMNS.price,
   BASE_COLUMNS.concept,
   BASE_COLUMNS.amount,
-  BASE_COLUMNS.floatMarketValue,
-  BASE_COLUMNS.reason
+  BASE_COLUMNS.floatMarketValue
 ]
 
 export default {
@@ -386,9 +390,9 @@ export default {
       return [
         { id: 'broken-today', title: '当日炸板票', rows: this.recap.brokenLimitToday || [], columns: BROKEN_COLUMNS },
         { id: 'broken-yesterday', title: '昨日炸板票反馈', rows: this.recap.brokenLimitYesterdayFeedback || [], columns: BROKEN_COLUMNS },
-        { id: 'limit-up', title: '当日连板票', rows: this.filteredConsecutiveRows, columns: STANDARD_COLUMNS },
+        { id: 'limit-up', title: '当日连板票', rows: this.filteredConsecutiveRows, columns: LIMIT_REASON_COLUMNS },
         { id: 'limit-up-yesterday', title: '昨日连板票反馈', rows: this.filteredConsecutiveFeedbackRows, columns: STANDARD_COLUMNS },
-        { id: 'first-limit', title: '当日首板票', rows: this.recap.firstLimitToday || [], columns: STANDARD_COLUMNS },
+        { id: 'first-limit', title: '当日首板票', rows: this.recap.firstLimitToday || [], columns: LIMIT_REASON_COLUMNS },
         { id: 'limit-down', title: '当日跌停票', rows: this.recap.limitDownToday || [], columns: STANDARD_COLUMNS },
         { id: 'gem-star', title: '创业板/科创板 10日涨幅前列', rows: this.recap.top10DayGainGemStar || [], columns: STANDARD_COLUMNS },
         { id: 'main-board', title: '主板 10日涨幅前列', rows: this.recap.top10DayGainMainBoard || [], columns: STANDARD_COLUMNS }

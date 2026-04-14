@@ -6,10 +6,15 @@ import io
 import json
 import math
 import os
+import re
 import time
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Callable
+
+import requests
+from bs4 import BeautifulSoup
+from curl_cffi import requests as curl_requests
 
 K_DATE = "\u65e5\u671f"
 K_CHANGE = "\u6da8\u8dcc\u5e45"
@@ -49,6 +54,15 @@ K_TODAY_CHANGE = "\u4eca\u65e5\u6da8\u8dcc\u5e45"
 K_MAIN_NET_INFLOW = "\u4e3b\u529b\u51c0\u6d41\u5165-\u51c0\u989d"
 YI = "\u4ebf"
 WAN = "\u4e07"
+THS_ZHANGTING_URL = "https://yuanchuang.10jqka.com.cn/zhangting/"
+THS_ZHANGTING_MORE_URL = "https://comment.10jqka.com.cn/api/zhangting.php"
+THS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://www.10jqka.com.cn/",
+}
 
 
 # 这一组工具函数负责把 AKShare / 东财的原始字段清洗成统一格式，
@@ -347,6 +361,150 @@ def stock_record(
 
 
 # 以下几组 map_* 方法把不同榜单统一映射成前端需要的 StockRecord / SectorRecord 结构。
+def ths_request_text(session: requests.Session, url: str, **kwargs: Any) -> str:
+    response = curl_requests.get(url, headers=THS_HEADERS, impersonate="chrome124", timeout=20, **kwargs)
+    response.raise_for_status()
+    content = response.content
+    meta_match = re.search(br'charset=["\']?([a-zA-Z0-9_-]+)', content[:2000], re.IGNORECASE)
+    candidates = []
+    if meta_match:
+        candidates.append(meta_match.group(1).decode("ascii", errors="ignore"))
+    apparent_encoding = getattr(response, "apparent_encoding", None)
+    response_encoding = getattr(response, "encoding", None)
+    if apparent_encoding:
+        candidates.append(apparent_encoding)
+    if response_encoding and response_encoding.lower() != "iso-8859-1":
+        candidates.append(response_encoding)
+    candidates.extend(["gb18030", "utf-8"])
+
+    for encoding in candidates:
+        if not encoding:
+            continue
+        try:
+            return content.decode(encoding, errors="ignore")
+        except LookupError:
+            continue
+    return content.decode("utf-8", errors="ignore")
+
+
+def parse_ths_reason_from_title(title: str, stock_name: str) -> str:
+    text = clean_text(title)
+    if not text:
+        return ""
+    text = re.sub(r"^涨停雷达[:：]\s*", "", text)
+    if stock_name:
+        text = re.sub(rf"\s*{re.escape(stock_name)}\s*触及涨停\s*$", "", text)
+    text = re.sub(r"\s*触及涨停\s*$", "", text)
+    return clean_text(text)
+
+
+def parse_ths_article_date(text: str) -> str:
+    value = clean_text(text)
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", value)
+    if match:
+        return match.group(1)
+
+    match = re.search(r"(\d{2})月(\d{2})日", value)
+    if match:
+        month = int(match.group(1))
+        day = int(match.group(2))
+        current_year = datetime.now().year
+        return f"{current_year:04d}-{month:02d}-{day:02d}"
+
+    return ""
+
+
+def parse_ths_items(html_text: str) -> list[dict[str, str]]:
+    soup = BeautifulSoup(html_text, "html.parser")
+    items: list[dict[str, str]] = []
+    for node in soup.select(".news-list .item, .item"):
+        detail_anchor = node.select_one("a.dlink")
+        stock_anchor = node.select_one(".stocks a")
+        title_node = node.select_one(".title")
+        date_node = node.select_one(".date span")
+        if not detail_anchor or not stock_anchor or not title_node or not date_node:
+            continue
+
+        stock_href = clean_text(stock_anchor.get("href"))
+        stock_text = clean_text(stock_anchor.get_text(" ", strip=True))
+        code_match = re.search(r"/(\d{6})/?", stock_href)
+        stock_match = re.search(r"(.+?)（(\d{6})）", stock_text)
+        code = code_match.group(1) if code_match else (stock_match.group(2) if stock_match else "")
+        name = stock_match.group(1) if stock_match else stock_text
+        title = clean_text(title_node.get_text(" ", strip=True))
+
+        items.append(
+            {
+                "code": normalize_code(code),
+                "name": name,
+                "title": title,
+                "reason": parse_ths_reason_from_title(title, name),
+                "publishedDate": parse_ths_article_date(date_node.get_text(" ", strip=True)),
+                "detailUrl": clean_text(detail_anchor.get("href")).replace("http://", "https://"),
+            }
+        )
+    return items
+
+
+def load_ths_page_items(session: requests.Session, start: int) -> list[dict[str, str]]:
+    if start == 0:
+        return parse_ths_items(ths_request_text(session, THS_ZHANGTING_URL))
+
+    response = curl_requests.get(
+        THS_ZHANGTING_MORE_URL,
+        params={"start": start, "count": 10},
+        headers=THS_HEADERS,
+        impersonate="chrome124",
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = json.loads(response.text)
+    return parse_ths_items(clean_text(payload.get("data", {}).get("html")))
+
+
+def build_ths_limit_reason_map(trade_date: str) -> dict[str, dict[str, str]]:
+    session = requests.Session()
+    session.headers.update(THS_HEADERS)
+    result: dict[str, dict[str, str]] = {}
+
+    try:
+        for start in range(0, 200, 10):
+            try:
+                items = load_ths_page_items(session, start)
+            except Exception:
+                break
+            if not items:
+                break
+
+            page_has_target = False
+            page_has_older = False
+            for item in items:
+                published_date = item.get("publishedDate", "")
+                if published_date == trade_date and item.get("code") and item.get("reason"):
+                    page_has_target = True
+                    result[item["code"]] = item
+                elif published_date and published_date < trade_date:
+                    page_has_older = True
+
+            if not page_has_target and start > 0:
+                break
+    finally:
+        session.close()
+
+    return result
+
+
+def enrich_rows_with_ths_reason(rows: list[dict[str, str]], reason_map: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+    enriched: list[dict[str, str]] = []
+    for row in rows:
+        current = dict(row)
+        reason_item = reason_map.get(clean_text(current.get("code")))
+        if reason_item and clean_text(reason_item.get("reason")):
+            current["reason"] = clean_text(reason_item["reason"])
+        enriched.append(current)
+    return enriched
+
+
 def map_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     mapped: list[dict[str, str]] = []
     for row in rows:
@@ -708,6 +866,8 @@ def main() -> None:
         time.sleep(args.sleep)
         previous_broken_rows = safe_call(ak.stock_zt_pool_zbgc_em, date=previous_trade_date_em)
 
+    ths_reason_map = build_ths_limit_reason_map(f"{trade_date_em[:4]}-{trade_date_em[4:6]}-{trade_date_em[6:]}")
+
     limit_up_all = map_limit_up(limit_up_rows)
     first_limit_today = map_first_limit(limit_up_all)
     limit_up_today = map_consecutive_limit(limit_up_all)
@@ -715,6 +875,9 @@ def main() -> None:
     broken_limit_yesterday_feedback = map_previous_broken_limit(ak, previous_broken_rows, trade_date_em, market_index)
     limit_down_today = map_limit_down(limit_down_rows)
     previous_limit_up_feedback = map_consecutive_limit(map_previous_limit_up(previous_limit_up_rows))
+
+    limit_up_today = enrich_rows_with_ths_reason(limit_up_today, ths_reason_map)
+    first_limit_today = enrich_rows_with_ths_reason(first_limit_today, ths_reason_map)
 
     top_up_sectors = map_sector_rows(concept_rows, top=True)
     top_down_sectors = map_sector_rows(concept_rows, top=False)
@@ -747,8 +910,8 @@ def main() -> None:
         "top10DayGainGemStar": map_top_10_day(ten_day_rows, is_gem_star, ak, trade_date_em),
         "top10DayGainMainBoard": map_top_10_day(ten_day_rows, is_main_board, ak, trade_date_em),
         "firstLimitSectorFocus": first_limit_focus(first_limit_today),
-        "dataSource": "akshare",
-        "notes": "\u6570\u636e\u6765\u81ea AKShare \u516c\u5f00 A \u80a1\u63a5\u53e3\uff1b\u5f53\u4e0a\u6e38\u677f\u5757\u699c\u5355\u4e0d\u53ef\u7528\u65f6\uff0c\u4f1a\u7528\u5df2\u91c7\u96c6\u7684\u4e2a\u80a1\u6570\u636e\u53cd\u63a8\u677f\u5757\u5f3a\u5f31\u3002",
+        "dataSource": "akshare+10jqka",
+        "notes": "\u884c\u60c5\u6570\u636e\u6765\u81ea AKShare \u516c\u5f00 A \u80a1\u63a5\u53e3\uff1b\u6da8\u505c\u539f\u56e0\u4f18\u5148\u8865\u5145\u540c\u82b1\u987a\u201c\u6da8\u505c\u96f7\u8fbe\u201d\u516c\u5f00\u9875\u9762\uff1b\u5f53\u4e0a\u6e38\u677f\u5757\u699c\u5355\u4e0d\u53ef\u7528\u65f6\uff0c\u4f1a\u7528\u5df2\u91c7\u96c6\u7684\u4e2a\u80a1\u6570\u636e\u53cd\u63a8\u677f\u5757\u5f3a\u5f31\u3002",
     }
     print(json.dumps(report, ensure_ascii=False))
 
