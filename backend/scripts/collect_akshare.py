@@ -51,6 +51,8 @@ YI = "\u4ebf"
 WAN = "\u4e07"
 
 
+# 这一组工具函数负责把 AKShare / 东财的原始字段清洗成统一格式，
+# 后面的映射函数就可以只处理一种数据口径。
 def clean_text(value: Any) -> str:
     if value is None:
         return ""
@@ -162,6 +164,7 @@ def without_proxy_env() -> Any:
             os.environ["no_proxy"] = no_proxy_backup_lower
 
 
+# 所有上游接口都通过 safe_call 进入，单个接口失败时返回空列表而不是直接中断整份复盘。
 def safe_call(func: Callable[..., Any], bypass_proxy: bool = False, **kwargs: Any) -> list[dict[str, Any]]:
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -220,6 +223,7 @@ def resolve_trade_dates(ak: Any, trade_date: str) -> tuple[str, str | None]:
     return target.replace("-", ""), None if previous is None else previous.replace("-", "")
 
 
+# 10 日排行接口本身字段不完整，所以这里额外补雪球的实时行情和个股资料。
 def load_daily_quote(ak: Any, code: str, trade_date_em: str) -> dict[str, str]:
     rows = safe_call(
         ak.stock_zh_a_hist,
@@ -342,6 +346,7 @@ def stock_record(
     }
 
 
+# 以下几组 map_* 方法把不同榜单统一映射成前端需要的 StockRecord / SectorRecord 结构。
 def map_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     mapped: list[dict[str, str]] = []
     for row in rows:
@@ -456,6 +461,7 @@ def map_previous_broken_limit(
     mapped: list[dict[str, str]] = []
     for row in rows:
         code = normalize_code(first_present(row, K_CODE))
+        # 优先用实时行情补字段，拿不到时保留炸板池原始值，避免页面出现空列。
         quote = quote_from_market_row(market_index.get(code, {}))
         quote = {
             "changePercent": quote.get("changePercent") or format_percent(first_present(row, K_CHANGE)),
@@ -526,6 +532,7 @@ def stock_change_value(row: dict[str, str]) -> float:
     return to_float(row.get("changePercent")) or 0.0
 
 
+# 当板块榜单接口不可用时，用已采集到的强弱个股反推板块热度，保证页面不空白。
 def build_sector_fallback(
     positive_rows: list[dict[str, str]],
     negative_rows: list[dict[str, str]],
@@ -581,6 +588,7 @@ def is_main_board(code: str) -> bool:
     return code.startswith(("000", "001", "002", "003", "600", "601", "603", "605"))
 
 
+# 10 日涨幅榜先按排行挑选，再对入榜个股补齐价格、成交额和流通值。
 def map_top_10_day(
     rows: list[dict[str, Any]],
     matcher: Callable[[str], bool],
@@ -660,6 +668,7 @@ def market_stats_from_rows(rows: list[dict[str, Any]], first_limit_count: int) -
     }
 
 
+# 采集主流程：解析交易日 -> 调用各榜单接口 -> 做字段补全 -> 组装成最终 report。
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", required=True)

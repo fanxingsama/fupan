@@ -11,6 +11,16 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 模拟数据提供者 —— 返回硬编码的演示数据，不访问任何外部接口。
+ * <p>
+ * 主要用于：
+ * <ul>
+ *   <li>前端开发时无需启动 Python 环境即可调试界面</li>
+ *   <li>演示和测试场景</li>
+ * </ul>
+ * 在 application.yml 中设置 recap.provider=mock 即可启用。
+ */
 @Component
 public class MockMarketRecapProvider implements MarketRecapProvider {
 

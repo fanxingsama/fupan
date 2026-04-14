@@ -18,6 +18,22 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+/**
+ * 复盘存储服务 —— 负责复盘报告的本地文件持久化与读取。
+ * <p>
+ * 本系统不使用传统数据库（如 MySQL、PostgreSQL），而是采用
+ * “每个交易日一个 JSON 文件”的策略存储在本地 data/ 目录下。
+ * 文件格式：{tradeDate}.json，例如 data/2026-04-14.json。
+ * <p>
+ * 这样做的好处：
+ * <ul>
+ *   <li>零依赖：不需要安装和配置任何数据库</li>
+ *   <li>可读性强：用文本编辑器就能直接查看 / 编辑历史复盘数据</li>
+ *   <li>备份简单：复制 data/ 目录即可完成备份</li>
+ * </ul>
+ *
+ * @see RecapCaptureService 采集服务会调用本类的 save() 方法来落盘
+ */
 @Service
 public class RecapStorageService {
 
@@ -30,6 +46,9 @@ public class RecapStorageService {
         Files.createDirectories(this.storageRoot);
     }
 
+    /**
+     * 每个交易日保存为一个 json 文件，方便后续直接回看历史复盘。
+     */
     public DailyRecapReport save(DailyRecapReport report) {
         Path path = filePath(report.tradeDate());
         try (OutputStream outputStream = Files.newOutputStream(path)) {
@@ -52,6 +71,9 @@ public class RecapStorageService {
         }
     }
 
+    /**
+     * 扫描 data 目录下已有的复盘文件，用于历史记录和日历面板展示。
+     */
     public List<RecapListItem> list() {
         List<RecapListItem> items = new ArrayList<>();
         try (Stream<Path> stream = Files.list(storageRoot)) {

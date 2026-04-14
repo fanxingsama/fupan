@@ -13,6 +13,18 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * AKShare 数据提供者 —— 通过 Python 子进程调用 AKShare 采集脟本来获取真实市场数据。
+ * <p>
+ * 工作原理：
+ * <ol>
+ *   <li>Java 层通过 ProcessBuilder 拉起 Python 采集脚本（scripts/collect_akshare.py）</li>
+ *   <li>Python 脚本通过 AKShare 库访问东方财富等接口，拉取涨停、跌停、板块等数据</li>
+ *   <li>Python 将采集结果以 JSON 格式输出到 stdout</li>
+ *   <li>Java 层解析 stdout 得到完整的 DailyRecapReport</li>
+ * </ol>
+ * 采集过程中会自动移除代理环境变量，避免上游接口被本机代理影响。
+ */
 @Component
 public class AkshareMarketRecapProvider implements MarketRecapProvider {
 
@@ -29,6 +41,9 @@ public class AkshareMarketRecapProvider implements MarketRecapProvider {
         return "akshare";
     }
 
+    /**
+     * Java 层负责拉起 Python 采集脚本并解析 stdout 返回的完整复盘 JSON。
+     */
     @Override
     public DailyRecapReport capture(LocalDate tradeDate) {
         Path scriptPath = Path.of(properties.collectorScript()).toAbsolutePath();
@@ -50,6 +65,7 @@ public class AkshareMarketRecapProvider implements MarketRecapProvider {
         processBuilder.directory(scriptPath.getParent().toFile());
         processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
         processBuilder.environment().put("PYTHONUTF8", "1");
+        // 某些上游网页接口会受本机代理影响，这里统一移除代理变量后再采集。
         processBuilder.environment().remove("HTTP_PROXY");
         processBuilder.environment().remove("HTTPS_PROXY");
         processBuilder.environment().remove("ALL_PROXY");
