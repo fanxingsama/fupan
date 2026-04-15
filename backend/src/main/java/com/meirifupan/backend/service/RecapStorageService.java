@@ -100,6 +100,36 @@ public class RecapStorageService {
         return items;
     }
 
+    /**
+     * 加载指定日期之前（含当日）最近 count 个交易日的完整报告，按日期升序排列。
+     * 用于后端计算趋势指标和情绪周期。
+     */
+    public List<DailyRecapReport> loadRecent(LocalDate targetDate, int count) {
+        List<LocalDate> allDates = new ArrayList<>();
+        try (Stream<Path> stream = Files.list(storageRoot)) {
+            stream.filter(p -> p.getFileName().toString().endsWith(".json"))
+                    .forEach(p -> {
+                        String name = p.getFileName().toString().replace(".json", "");
+                        try {
+                            LocalDate d = LocalDate.parse(name);
+                            if (!d.isAfter(targetDate)) allDates.add(d);
+                        } catch (Exception ignored) {}
+                    });
+        } catch (IOException e) {
+            return List.of();
+        }
+        allDates.sort(Comparator.naturalOrder());
+        List<LocalDate> selected = allDates.size() > count
+                ? allDates.subList(allDates.size() - count, allDates.size())
+                : allDates;
+
+        List<DailyRecapReport> reports = new ArrayList<>();
+        for (LocalDate d : selected) {
+            findByDate(d).ifPresent(reports::add);
+        }
+        return reports;
+    }
+
     private Path filePath(LocalDate tradeDate) {
         return storageRoot.resolve(tradeDate + ".json");
     }

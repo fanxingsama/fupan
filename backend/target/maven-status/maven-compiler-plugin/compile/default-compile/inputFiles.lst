@@ -4,12 +4,16 @@ C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\contro
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\DailyRecapApplication.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\CaptureRequest.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\DailyRecapReport.java
+C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\MarketIndicators.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\MarketStats.java
+C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\RecapDetailResponse.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\RecapListItem.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\SectorRecord.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\StockRecord.java
+C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\TrendPoint.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\AkshareMarketRecapProvider.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\MarketRecapProvider.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\MockMarketRecapProvider.java
+C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\IndicatorService.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\RecapCaptureService.java
 C:\Users\29224\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\RecapStorageService.java

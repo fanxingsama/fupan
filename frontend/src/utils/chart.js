@@ -30,6 +30,65 @@ export function buildTrendOption(values, dates, color) {
   }
 }
 
+// 双线趋势图（如封板率+涨停数叠加）
+export function buildDualTrendOption(values1, values2, dates, color1, color2, name1, name2) {
+  return {
+    animationDuration: 500,
+    grid: { left: 18, right: 18, top: 28, bottom: 24, containLabel: true },
+    tooltip: { trigger: 'axis', backgroundColor: '#0f172a', borderWidth: 0, textStyle: { color: '#f8fafc' } },
+    legend: { data: [name1, name2], top: 0, textStyle: { color: '#64748b', fontSize: 11 } },
+    xAxis: {
+      type: 'category', data: dates, boundaryGap: false,
+      axisLine: { lineStyle: { color: 'rgba(20,33,61,0.12)' } },
+      axisTick: { show: false }, axisLabel: { color: '#64748b' }
+    },
+    yAxis: [
+      { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: 'rgba(20,33,61,0.08)', type: 'dashed' } }, axisLabel: { color: '#64748b' } },
+      { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: '#64748b' } }
+    ],
+    series: [
+      { name: name1, data: values1, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, yAxisIndex: 0, lineStyle: { width: 3, color: color1 }, itemStyle: { color: color1, borderColor: '#fff', borderWidth: 2 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `${color1}44` }, { offset: 1, color: `${color1}08` }]) } },
+      { name: name2, data: values2, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, yAxisIndex: 1, lineStyle: { width: 3, color: color2 }, itemStyle: { color: color2, borderColor: '#fff', borderWidth: 2 } }
+    ]
+  }
+}
+
+// 连板梯队柱状图（纵向，从低到高）
+export function buildLadderOption(ladderData) {
+  if (!ladderData || !ladderData.length) return {}
+  const categories = ladderData.map(d => d.height === 1 ? '首板' : d.height + '板')
+  const values = ladderData.map(d => d.count)
+  const maxVal = Math.max(...values)
+
+  return {
+    animationDuration: 500,
+    grid: { left: 12, right: 40, top: 8, bottom: 8, containLabel: true },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#0f172a', borderWidth: 0, textStyle: { color: '#f8fafc' } },
+    xAxis: { type: 'value', axisLabel: { color: '#64748b' }, splitLine: { lineStyle: { color: 'rgba(20,33,61,0.08)', type: 'dashed' } } },
+    yAxis: {
+      type: 'category', data: categories, axisTick: { show: false }, axisLine: { show: false },
+      axisLabel: { color: '#14213d', fontWeight: 600 }
+    },
+    series: [{
+      type: 'bar',
+      data: values.map((v, idx) => ({
+        value: v,
+        itemStyle: {
+          borderRadius: 999,
+          color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
+            { offset: 0, color: ladderData[idx].height >= 4 ? '#ef4444' : ladderData[idx].height >= 2 ? '#f97316' : '#22c55e' },
+            { offset: 1, color: ladderData[idx].height >= 4 ? '#fca5a5' : ladderData[idx].height >= 2 ? '#fed7aa' : '#bbf7d0' }
+          ])
+        }
+      })),
+      barWidth: 16,
+      showBackground: true,
+      backgroundStyle: { color: 'rgba(20,33,61,0.04)' },
+      label: { show: true, position: 'right', distance: 8, color: '#14213d', fontWeight: 600 }
+    }]
+  }
+}
+
 export function buildBarOption(rows, color, reverse = false) {
   const data = rows
     .map(item => ({ name: item.name, change: parseNumericValue(item.changePercent) ?? 0 }))

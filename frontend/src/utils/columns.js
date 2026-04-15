@@ -9,7 +9,12 @@ export const BASE_COLUMNS = {
   concept: { key: 'concept', label: '概念', sortable: true, sortType: 'string' },
   amount: { key: 'amount', label: '成交额', sortable: true, sortType: 'number' },
   floatMarketValue: { key: 'floatMarketValue', label: '流通市值', sortable: true, sortType: 'number' },
-  reason: { key: 'reason', label: '原因', sortable: true, sortType: 'string' }
+  reason: { key: 'reason', label: '原因', sortable: true, sortType: 'string' },
+  sealAmount: { key: 'sealAmount', label: '封板金额', sortable: true, sortType: 'number' },
+  turnoverRate: { key: 'turnoverRate', label: '换手率', sortable: true, sortType: 'number' },
+  amplitude: { key: 'amplitude', label: '振幅', sortable: true, sortType: 'number' },
+  extraTag: { key: 'extraTag', label: '封板时间', sortable: true, sortType: 'string' },
+  auctionChangePercent: { key: 'auctionChangePercent', label: '竞价涨幅', sortable: true, sortType: 'number' }
 }
 
 export const STANDARD_COLUMNS = [
@@ -29,4 +34,30 @@ export const BROKEN_COLUMNS = [
 export const FOCUS_DETAIL_COLUMNS = [
   BASE_COLUMNS.code, BASE_COLUMNS.name, BASE_COLUMNS.price,
   BASE_COLUMNS.amount, BASE_COLUMNS.floatMarketValue, BASE_COLUMNS.reason
+]
+
+// 炸板票增强列（含振幅、换手率、封板时间）
+export const BROKEN_ENHANCED_COLUMNS = [
+  BASE_COLUMNS.code, BASE_COLUMNS.name, BASE_COLUMNS.changePercent,
+  BASE_COLUMNS.price, BASE_COLUMNS.concept, BASE_COLUMNS.amount,
+  BASE_COLUMNS.floatMarketValue, BASE_COLUMNS.amplitude,
+  BASE_COLUMNS.turnoverRate, BASE_COLUMNS.extraTag
+]
+
+// 连板票增强列（含封板时间、封板金额、换手率）
+export const CONSECUTIVE_ENHANCED_COLUMNS = [
+  BASE_COLUMNS.code, BASE_COLUMNS.name, BASE_COLUMNS.boardHeight,
+  BASE_COLUMNS.changePercent, BASE_COLUMNS.price, BASE_COLUMNS.concept,
+  BASE_COLUMNS.amount, BASE_COLUMNS.floatMarketValue,
+  BASE_COLUMNS.sealAmount, BASE_COLUMNS.turnoverRate,
+  BASE_COLUMNS.extraTag, BASE_COLUMNS.reason
+]
+
+// 首板票增强列（含封板时间、封板金额、换手率、振幅）
+export const FIRST_LIMIT_ENHANCED_COLUMNS = [
+  BASE_COLUMNS.code, BASE_COLUMNS.name,
+  BASE_COLUMNS.changePercent, BASE_COLUMNS.price, BASE_COLUMNS.concept,
+  BASE_COLUMNS.amount, BASE_COLUMNS.floatMarketValue,
+  BASE_COLUMNS.sealAmount, BASE_COLUMNS.turnoverRate,
+  BASE_COLUMNS.amplitude, BASE_COLUMNS.extraTag, BASE_COLUMNS.reason
 ]

@@ -36,12 +36,22 @@ export function percentClass(value) {
 }
 
 export function cellClass(column, item) {
-  return column.key === 'changePercent' ? percentClass(item.changePercent) : ''
+  if (column.key === 'changePercent') return percentClass(item.changePercent)
+  if (column.key === 'auctionChangePercent') return percentClass(item.auctionChangePercent)
+  return ''
+}
+
+export function formatSealTime(raw) {
+  if (!raw || raw.length < 4) return raw || '-'
+  // "093030" → "09:30:30", "1030" → "10:30"
+  const s = String(raw).padStart(6, '0')
+  return s.slice(0, 2) + ':' + s.slice(2, 4) + ':' + s.slice(4, 6)
 }
 
 export function displayValue(column, item) {
   if (column.key === 'reason') return item.reason || item.extraTag || '-'
   if (column.key === 'concept') return item.concept || item.industry || '-'
+  if (column.key === 'extraTag') return formatSealTime(item.extraTag)
   return item[column.key] || '-'
 }
 

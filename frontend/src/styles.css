@@ -419,6 +419,87 @@ h2 {
   margin-bottom: 1.25rem;
 }
 
+/* ── 情绪驾驶舱 ── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.dash-card {
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dash-card-phase {
+  background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(248,250,252,0.92));
+}
+
+.dash-label {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.dash-value {
+  font-size: 1.6rem;
+  line-height: 1.2;
+}
+
+.dash-sub {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.indicator-good { color: #d62828; }
+.indicator-bad { color: #2a9d8f; }
+.indicator-warn { color: #f59e0b; }
+
+/* ── 风险预警 ── */
+.risk-signal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.risk-tag {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.risk-danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.risk-warning {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.risk-safe {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+/* ── 两列图表行 ── */
+.chart-row-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .tab-bar {
   display: flex;
   gap: 0.75rem;
@@ -610,13 +691,25 @@ td.down {
     grid-template-columns: 1fr;
   }
 
+  .chart-row-2 {
+    grid-template-columns: 1fr;
+  }
+
   .summary-grid-3 {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 1080px) {
   .page-shell {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

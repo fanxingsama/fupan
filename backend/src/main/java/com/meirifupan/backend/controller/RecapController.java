@@ -2,7 +2,9 @@ package com.meirifupan.backend.controller;
 
 import com.meirifupan.backend.model.CaptureRequest;
 import com.meirifupan.backend.model.DailyRecapReport;
+import com.meirifupan.backend.model.RecapDetailResponse;
 import com.meirifupan.backend.model.RecapListItem;
+import com.meirifupan.backend.service.IndicatorService;
 import com.meirifupan.backend.service.RecapCaptureService;
 import com.meirifupan.backend.service.RecapStorageService;
 import jakarta.validation.Valid;
@@ -25,10 +27,9 @@ import java.util.List;
  * 接口一览：
  * <ul>
  *   <li>GET  /api/recaps           —— 返回所有已生成复盘的交易日列表（轻量摘要）</li>
- *   <li>GET  /api/recaps/{tradeDate} —— 返回指定交易日的完整复盘报告</li>
- *   <li>POST /api/recaps/capture    —— 触发指定交易日的数据采集，采集完成后返回报告</li>
+ *   <li>GET  /api/recaps/{tradeDate} —— 返回指定交易日的完整复盘报告（含计算指标和趋势数据）</li>
+ *   <li>POST /api/recaps/capture    —— 触发指定交易日的数据采集，采集完成后返回报告（含计算指标和趋势数据）</li>
  * </ul>
- * 前端通过这三个接口实现：查看历史复盘、加载详情、触发新采集。
  */
 @RestController
 @RequestMapping("/api/recaps")
@@ -36,35 +37,50 @@ public class RecapController {
 
     private final RecapStorageService storageService;
     private final RecapCaptureService captureService;
+    private final IndicatorService indicatorService;
 
-    public RecapController(RecapStorageService storageService, RecapCaptureService captureService) {
+    public RecapController(RecapStorageService storageService,
+                           RecapCaptureService captureService,
+                           IndicatorService indicatorService) {
         this.storageService = storageService;
         this.captureService = captureService;
+        this.indicatorService = indicatorService;
     }
 
-    /**
-     * 返回本地已经生成过复盘数据的交易日列表。
-     */
     @GetMapping
     public List<RecapListItem> list() {
         return storageService.list();
     }
 
     /**
-     * 读取某一天已经保存在本地 json 文件里的复盘详情。
+     * 返回指定交易日的完整复盘报告，包含后端计算好的指标和趋势数据。
      */
     @GetMapping("/{tradeDate}")
-    public DailyRecapReport detail(@PathVariable LocalDate tradeDate) {
-        return storageService.findByDate(tradeDate)
+    public RecapDetailResponse detail(@PathVariable LocalDate tradeDate) {
+        DailyRecapReport report = storageService.findByDate(tradeDate)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到该日期复盘"));
+        return buildResponse(report);
     }
 
     /**
-     * 触发一次指定交易日的采集，并把采集结果直接返回给前端。
+     * 触发采集并返回包含指标和趋势数据的完整响应。
      */
     @PostMapping("/capture")
     @ResponseStatus(HttpStatus.CREATED)
-    public DailyRecapReport capture(@Valid @RequestBody CaptureRequest request) {
-        return captureService.capture(request.tradeDate());
+    public RecapDetailResponse capture(@Valid @RequestBody CaptureRequest request) {
+        DailyRecapReport report = captureService.capture(request.tradeDate());
+        return buildResponse(report);
+    }
+
+    /**
+     * 加载最近的历史报告，计算指标和趋势，打包为统一响应体。
+     */
+    private RecapDetailResponse buildResponse(DailyRecapReport report) {
+        List<DailyRecapReport> recentReports = storageService.loadRecent(report.tradeDate(), 20);
+        var indicators = indicatorService.calculate(report, recentReports);
+        var trendPoints = recentReports.stream()
+                .map(indicatorService::toTrendPoint)
+                .toList();
+        return new RecapDetailResponse(report, indicators, trendPoints);
     }
 }

@@ -61,7 +61,8 @@
       <OverviewPage
         v-if="activeView === 'overview' && recap"
         :recap="recap"
-        :trend-reports="trendReports"
+        :indicators="indicators"
+        :trend-points="trendPoints"
       />
 
       <TabbedTablePage
@@ -109,11 +110,12 @@ export default {
       recaps: [],
       selectedDate: '',
       recap: null,
+      indicators: null,
+      trendPoints: [],
       loading: false,
       capturing: false,
       error: '',
       activeView: 'overview',
-      trendReports: [],
       calendarCursor: '',
       autoCaptureTimer: null,
       lastAutoCaptureStartedAt: 0,
@@ -121,6 +123,7 @@ export default {
       showOverwriteDialog: false,
       pendingOldRecap: null,
       pendingNewRecap: null,
+      pendingNewResponse: null,
       // Toast
       toastMessage: '',
       toastTimer: null,
@@ -217,16 +220,15 @@ export default {
       if (isCurrentTradingDay) {
         // 交易日当日：直接采集替换，不弹窗
         if (hasExistingData) {
-          // 先展示旧数据
           try {
-            this.recap = await getRecap(day.tradeDate)
+            this.applyResponse(await getRecap(day.tradeDate))
             this.activeView = 'overview'
           } catch (_) {}
         }
         this.capturing = true
         this.error = ''
         try {
-          this.recap = await captureRecap(day.tradeDate)
+          this.applyResponse(await captureRecap(day.tradeDate))
           this.activeView = 'overview'
           await this.loadRecapList()
           this.showToast('数据已更新')
@@ -237,28 +239,29 @@ export default {
         }
       } else if (hasExistingData) {
         // 历史日期且有旧数据：采集后比对，有变动弹窗展示详情
-        let oldRecap = null
-        try { oldRecap = await getRecap(day.tradeDate) } catch (_) {}
+        let oldResp = null
+        try { oldResp = await getRecap(day.tradeDate) } catch (_) {}
 
-        if (oldRecap) {
-          this.recap = oldRecap
+        if (oldResp) {
+          this.applyResponse(oldResp)
           this.activeView = 'overview'
         }
 
         this.capturing = true
         this.error = ''
         try {
-          const newRecap = await captureRecap(day.tradeDate)
+          const newResp = await captureRecap(day.tradeDate)
 
-          if (oldRecap && !recapsAreDifferent(oldRecap, newRecap)) {
+          if (oldResp && !recapsAreDifferent(oldResp.report, newResp.report)) {
             this.showToast('数据无变动，无需更新')
             await this.loadRecapList()
-          } else if (oldRecap) {
-            this.pendingOldRecap = oldRecap
-            this.pendingNewRecap = newRecap
+          } else if (oldResp) {
+            this.pendingOldRecap = oldResp.report
+            this.pendingNewRecap = newResp.report
+            this.pendingNewResponse = newResp
             this.showOverwriteDialog = true
           } else {
-            this.recap = newRecap
+            this.applyResponse(newResp)
             this.activeView = 'overview'
             await this.loadRecapList()
           }
@@ -277,7 +280,7 @@ export default {
       this.capturing = true
       this.error = ''
       try {
-        this.recap = await captureRecap(tradeDate)
+        this.applyResponse(await captureRecap(tradeDate))
         this.activeView = 'overview'
         await this.loadRecapList()
       } catch (err) {
@@ -287,20 +290,28 @@ export default {
       }
     },
 
+    // ── 响应数据拆包 ──
+    applyResponse(resp) {
+      this.recap = resp.report
+      this.indicators = resp.indicators
+      this.trendPoints = resp.trendPoints
+    },
+
     // ── 覆盖确认弹窗 ──
     confirmOverwrite() {
-      this.recap = this.pendingNewRecap
+      if (this.pendingNewResponse) this.applyResponse(this.pendingNewResponse)
       this.showOverwriteDialog = false
       this.pendingOldRecap = null
       this.pendingNewRecap = null
+      this.pendingNewResponse = null
       this.activeView = 'overview'
       this.loadRecapList()
     },
     cancelOverwrite() {
-      this.recap = this.pendingOldRecap
       this.showOverwriteDialog = false
       this.pendingOldRecap = null
       this.pendingNewRecap = null
+      this.pendingNewResponse = null
       this.activeView = 'overview'
     },
 
@@ -337,7 +348,7 @@ export default {
       this.capturing = true
       this.error = ''
       try {
-        this.recap = await captureRecap(this.selectedDate)
+        this.applyResponse(await captureRecap(this.selectedDate))
         await this.loadRecapList()
       } catch (error) {
         this.error = error.message
@@ -347,22 +358,15 @@ export default {
     },
 
     // ── 数据加载 ──
-    async loadTrendReports() {
-      const dates = this.recaps.map(item => item.tradeDate).sort().slice(-20)
-      if (!dates.length) return (this.trendReports = [])
-      const reports = await Promise.all(dates.map(date => getRecap(date)))
-      this.trendReports = reports.sort((a, b) => a.tradeDate.localeCompare(b.tradeDate))
-    },
     async loadRecapList() {
       this.recaps = await listRecaps()
-      await this.loadTrendReports()
     },
     async loadRecap() {
       if (!this.selectedDate) return
       this.loading = true
       this.error = ''
       try {
-        this.recap = await getRecap(this.selectedDate)
+        this.applyResponse(await getRecap(this.selectedDate))
         this.activeView = 'overview'
         this.setCalendarCursor(this.selectedDate)
       } catch (error) {

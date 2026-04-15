@@ -26,7 +26,7 @@
 <script>
 import DataTable from './DataTable.vue'
 import { toBoardHeight } from '../utils/format'
-import { BROKEN_COLUMNS, STANDARD_COLUMNS, LIMIT_REASON_COLUMNS } from '../utils/columns'
+import { BROKEN_ENHANCED_COLUMNS, STANDARD_COLUMNS, CONSECUTIVE_ENHANCED_COLUMNS, FIRST_LIMIT_ENHANCED_COLUMNS, LIMIT_REASON_COLUMNS } from '../utils/columns'
 
 export default {
   name: 'TabbedTablePage',
@@ -79,21 +79,21 @@ export default {
         return {
           title: tab.key === 'today' ? '当日炸板票' : '昨日炸板票反馈',
           rows: tab.rows,
-          columns: BROKEN_COLUMNS
+          columns: BROKEN_ENHANCED_COLUMNS
         }
       }
       if (this.pageType === 'consecutive') {
         return {
           title: tab.key === 'today' ? '当日连板票' : '昨日连板票反馈',
           rows: tab.rows,
-          columns: tab.key === 'today' ? LIMIT_REASON_COLUMNS : STANDARD_COLUMNS
+          columns: tab.key === 'today' ? CONSECUTIVE_ENHANCED_COLUMNS : STANDARD_COLUMNS
         }
       }
       if (this.pageType === 'firstLimit') {
         return {
           title: tab.key === 'today' ? '当日首板票' : '昨日首板票反馈',
           rows: tab.rows,
-          columns: LIMIT_REASON_COLUMNS
+          columns: tab.key === 'today' ? FIRST_LIMIT_ENHANCED_COLUMNS : LIMIT_REASON_COLUMNS
         }
       }
       return { title: '', rows: [], columns: [] }
