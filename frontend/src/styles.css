@@ -306,6 +306,31 @@ h2 {
   text-align: center;
 }
 
+.capture-meta-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+  margin: 1rem 0 1.4rem;
+}
+
+.capture-meta-item {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.capture-meta-item span {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.capture-meta-item strong {
+  font-size: 1rem;
+}
+
 /* ── 弹窗 ── */
 .modal-overlay {
   position: fixed;
@@ -349,6 +374,55 @@ h2 {
   max-height: 320px;
   overflow-y: auto;
   margin: 1rem 0;
+}
+
+.diff-summary-list {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.diff-summary-item {
+  width: 100%;
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #14213d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: left;
+}
+
+.diff-summary-item small {
+  color: #64748b;
+}
+
+.diff-summary-item.active {
+  background: #14213d;
+  color: #fff;
+}
+
+.diff-summary-item.active small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.diff-detail-wrap {
+  margin: 1rem 0;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.diff-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.diff-detail-head h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .diff-table {
@@ -414,9 +488,49 @@ h2 {
   margin-bottom: 1.5rem;
 }
 
+.board-index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.board-index-card {
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 1rem 1.1rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.board-index-latest {
+  display: block;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.board-index-change {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.board-index-change small {
+  color: #64748b;
+  font-weight: 500;
+}
+
 .summary-grid-3 {
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
   margin-bottom: 1.25rem;
+}
+
+.summary-hint {
+  display: block;
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.8rem;
 }
 
 /* ── 情绪驾驶舱 ── */
@@ -711,5 +825,224 @@ td.down {
 
   .dashboard-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.battlefield-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.battle-card {
+  padding: 1.25rem;
+}
+
+.battle-card-hero h3 {
+  margin: 0.2rem 0 0.6rem;
+  font-size: 1.6rem;
+}
+
+.battle-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.battle-meta span,
+.watch-card-head small,
+.schedule-window,
+.theme-phase {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.battle-meta strong {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 1rem;
+}
+
+.text-list {
+  margin: 0.8rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.theme-grid,
+.pool-grid,
+.schedule-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.theme-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.theme-card {
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 251, 0.92));
+  border: 1px solid rgba(20, 33, 61, 0.08);
+}
+
+.theme-head,
+.watch-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.theme-head h3,
+.watch-card-head h3,
+.schedule-card h3 {
+  margin: 0;
+}
+
+.theme-score,
+.watch-score {
+  font-size: 1.5rem;
+  color: #14213d;
+}
+
+.section-subtitle {
+  margin: 0.25rem 0 0;
+}
+
+.watchlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.watch-card {
+  padding: 1.1rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(20, 33, 61, 0.08);
+}
+
+.watch-summary,
+.watch-risk,
+.watch-plan-row p,
+.schedule-card p,
+.theme-card p {
+  margin: 0.65rem 0 0;
+  color: #475569;
+}
+
+.watch-plan-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin-top: 0.9rem;
+}
+
+.watch-risk {
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(20, 33, 61, 0.08);
+}
+
+.pool-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin: 1rem 0;
+}
+
+.mini-stock-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mini-stock-item {
+  width: 100%;
+  border-radius: 18px;
+  background: #f8fafc;
+  color: #14213d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.mini-stock-item small {
+  display: block;
+  color: #64748b;
+}
+
+.schedule-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.schedule-card {
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  border: 1px solid rgba(20, 33, 61, 0.08);
+}
+
+.ai-summary-panel {
+  margin: 1rem 0;
+}
+
+.ai-summary-content {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ai-summary-text {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+.ai-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.ai-disclaimer {
+  font-size: 0.82rem;
+}
+
+.import-row,
+.journal-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.trade-day-panel {
+  margin-top: 1rem;
+}
+
+.import-result {
+  margin-top: 0.8rem;
+}
+
+@media (max-width: 1280px) {
+  .battlefield-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .battle-meta,
+  .watch-plan-row,
+  .import-row,
+  .journal-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
 }

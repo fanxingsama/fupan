@@ -10,7 +10,6 @@
     />
     <ToastBar :message="toastMessage" />
 
-    <!-- 采集失败弹窗 -->
     <div v-if="captureErrorMsg" class="modal-overlay" @click.self="captureErrorMsg = ''">
       <div class="modal-card">
         <h2>采集失败</h2>
@@ -25,7 +24,7 @@
       <div class="brand-block">
         <p class="eyebrow">A股短线复盘</p>
         <h1>每日复盘</h1>
-        <p class="muted">把炸板、连板、首板和板块强弱沉淀成可以回看的交易笔记。</p>
+        <p class="muted">把情绪、主线、AI 整理和个人交易日志串起来，形成更完整的交易辅助系统。</p>
       </div>
 
       <div class="panel nav-panel">
@@ -45,8 +44,7 @@
       <RecapCalendar
         :month-label="calendarMonthLabel"
         :days="calendarDays"
-        :selected-date="selectedDate"
-        :capturing="capturing"
+        :capturing-date="capturingDate"
         @shift-month="shiftCalendarMonth"
         @day-click="handleCalendarClick"
       />
@@ -54,91 +52,100 @@
 
     <main class="content">
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="loading && !capturing" class="muted">正在加载复盘数据...</p>
-      <p v-if="capturing" class="muted">正在采集 {{ selectedDate }} 的数据，请稍候...</p>
-      <p v-if="!recap && !loading && !capturing && !error" class="muted center-hint">暂无复盘数据</p>
+      <p v-if="loading" class="muted">正在加载复盘数据...</p>
+      <p v-if="capturingDate" class="muted">正在采集 {{ capturingDate }} 的数据，请稍候...</p>
+      <p v-if="!recap && !loading && !error && activeView !== 'journal'" class="muted center-hint">暂无复盘数据</p>
+
+      <section v-if="selectedDate && activeView !== 'journal'" class="capture-meta-panel">
+        <div class="capture-meta-item">
+          <span>当前查看</span>
+          <strong>{{ selectedDate }}</strong>
+        </div>
+        <div class="capture-meta-item">
+          <span>最近采集时间</span>
+          <strong>{{ lastCapturedAtLabel }}</strong>
+        </div>
+        <div class="capture-meta-item">
+          <span>自动采集状态</span>
+          <strong>{{ autoCaptureStatus }}</strong>
+        </div>
+      </section>
 
       <OverviewPage
         v-if="activeView === 'overview' && recap"
         :recap="recap"
         :indicators="indicators"
+        :trade-plan="tradePlan"
         :trend-points="trendPoints"
       />
 
-      <TabbedTablePage
-        v-if="activeView === 'broken' && recap"
-        :recap="recap"
-        page-type="broken"
-      />
-
-      <TabbedTablePage
-        v-if="activeView === 'consecutive' && recap"
-        :recap="recap"
-        page-type="consecutive"
-      />
-
-      <TabbedTablePage
-        v-if="activeView === 'firstLimit' && recap"
-        :recap="recap"
-        page-type="firstLimit"
-      />
-
-      <HighRankPage
-        v-if="activeView === 'highRank' && recap"
-        :recap="recap"
-      />
+      <TabbedTablePage v-if="activeView === 'broken' && recap" :recap="recap" page-type="broken" />
+      <TabbedTablePage v-if="activeView === 'consecutive' && recap" :recap="recap" page-type="consecutive" />
+      <TabbedTablePage v-if="activeView === 'firstLimit' && recap" :recap="recap" page-type="firstLimit" />
+      <HighRankPage v-if="activeView === 'highRank' && recap" :recap="recap" />
+      <TradeJournalPage v-if="activeView === 'journal'" />
     </main>
   </div>
 </template>
 
 <script>
 import { captureRecap, getRecap, listRecaps } from './api'
-import { formatDateStr, formatMonthLabel, startOfMonth, shiftMonth, isTradingDay, getCurrentTradingDate, isTradingWindowNow, recapsAreDifferent } from './utils/trading'
+import {
+  formatDateStr,
+  formatMonthLabel,
+  startOfMonth,
+  shiftMonth,
+  isTradingDay,
+  getCurrentTradingDate,
+  isTradingWindowNow,
+  recapsAreDifferent,
+  recapsDiffSummary
+} from './utils/trading'
 
 import RecapCalendar from './components/RecapCalendar.vue'
 import OverviewPage from './components/OverviewPage.vue'
 import TabbedTablePage from './components/TabbedTablePage.vue'
 import HighRankPage from './components/HighRankPage.vue'
+import TradeJournalPage from './components/TradeJournalPage.vue'
 import OverwriteDialog from './components/OverwriteDialog.vue'
 import ToastBar from './components/ToastBar.vue'
 
 export default {
   name: 'App',
-  components: { RecapCalendar, OverviewPage, TabbedTablePage, HighRankPage, OverwriteDialog, ToastBar },
+  components: { RecapCalendar, OverviewPage, TabbedTablePage, HighRankPage, TradeJournalPage, OverwriteDialog, ToastBar },
   data() {
     return {
       recaps: [],
       selectedDate: '',
       recap: null,
       indicators: null,
+      tradePlan: null,
       trendPoints: [],
       loading: false,
-      capturing: false,
+      capturingDate: '',
       error: '',
       activeView: 'overview',
       calendarCursor: '',
       autoCaptureTimer: null,
       lastAutoCaptureStartedAt: 0,
-      // 覆盖确认弹窗
       showOverwriteDialog: false,
       pendingOldRecap: null,
       pendingNewRecap: null,
       pendingNewResponse: null,
-      // Toast
       toastMessage: '',
       toastTimer: null,
-      // 采集失败弹窗
       captureErrorMsg: ''
     }
   },
   computed: {
     navItems() {
       return [
-        { id: 'overview', label: '总览' },
-        { id: 'broken', label: '炸板票板块' },
-        { id: 'consecutive', label: '连板票板块' },
-        { id: 'firstLimit', label: '首板票板块' },
-        { id: 'highRank', label: '高标板块' }
+        { id: 'overview', label: '交易驾驶舱' },
+        { id: 'broken', label: '炸板复盘' },
+        { id: 'consecutive', label: '连板梯队' },
+        { id: 'firstLimit', label: '首板池' },
+        { id: 'highRank', label: '高标观察' },
+        { id: 'journal', label: '交易日志' }
       ]
     },
     calendarMonthLabel() {
@@ -155,21 +162,27 @@ export default {
         const date = new Date(firstGridDay)
         date.setDate(firstGridDay.getDate() + index)
         const tradeDate = formatDateStr(date)
-        const hasRecap = this.recaps.some(item => item.tradeDate === tradeDate)
         return {
           key: `${tradeDate}-${index}`,
           day: date.getDate(),
           tradeDate,
           inMonth: tradeDate.startsWith(this.calendarCursor),
-          hasRecap,
+          hasRecap: this.recaps.some(item => item.tradeDate === tradeDate),
           isSelected: tradeDate === this.selectedDate,
           isTradingDay: isTradingDay(tradeDate),
           isFuture: tradeDate > todayStr
         }
       })
+    },
+    lastCapturedAtLabel() {
+      if (!this.recap?.createdAt) return '暂无'
+      return this.formatCaptureTime(this.recap.createdAt)
+    },
+    autoCaptureStatus() {
+      if (this.capturingDate) return `正在采集 ${this.capturingDate}`
+      return isTradingWindowNow() ? '盘中自动巡检中' : '当前不在自动采集时间段'
     }
   },
-
   async mounted() {
     const tradingDate = getCurrentTradingDate()
     this.selectedDate = tradingDate
@@ -177,11 +190,11 @@ export default {
 
     try {
       await this.loadRecapList()
-      const hasData = this.recaps.some(r => r.tradeDate === tradingDate)
+      const hasData = this.recaps.some(item => item.tradeDate === tradingDate)
       if (hasData) {
-        await this.loadRecap()
+        await this.loadRecap(tradingDate)
       } else {
-        await this.autoCapture(tradingDate)
+        await this.captureTradeDate(tradingDate, { forceApply: true })
       }
     } catch (error) {
       this.error = error.message
@@ -189,12 +202,10 @@ export default {
 
     this.startAutoCaptureLoop()
   },
-
   beforeDestroy() {
     this.stopAutoCaptureLoop()
     if (this.toastTimer) clearTimeout(this.toastTimer)
   },
-
   methods: {
     setCalendarCursor(dateText) {
       if (dateText) this.calendarCursor = dateText.slice(0, 7)
@@ -206,100 +217,130 @@ export default {
       this.activeView = viewId
       this.$nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
     },
-
-    // ── 日历点击 → 采集 + 数据比对 ──
+    formatCaptureTime(value) {
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return value
+      return date.toLocaleString('zh-CN', { hour12: false })
+    },
+    setEmptyState() {
+      this.recap = null
+      this.indicators = null
+      this.tradePlan = null
+      this.trendPoints = []
+    },
+    applyResponse(resp, tradeDate = '') {
+      if (!resp) return
+      if (tradeDate && tradeDate !== this.selectedDate) return
+      this.recap = resp.report
+      this.indicators = resp.indicators
+      this.tradePlan = resp.tradePlan
+      this.trendPoints = resp.trendPoints
+      this.error = ''
+    },
+    async loadRecapList() {
+      this.recaps = await listRecaps()
+    },
+    async loadRecap(tradeDate = this.selectedDate) {
+      if (!tradeDate) return
+      this.loading = true
+      this.error = ''
+      try {
+        const resp = await getRecap(tradeDate)
+        this.applyResponse(resp, tradeDate)
+        this.activeView = 'overview'
+        this.setCalendarCursor(tradeDate)
+      } catch (error) {
+        if (tradeDate === this.selectedDate) this.setEmptyState()
+        this.error = error.message
+      } finally {
+        this.loading = false
+      }
+    },
+    async captureTradeDate(tradeDate, options = {}) {
+      const { forceApply = false, showSuccessToast = false } = options
+      this.capturingDate = tradeDate
+      this.error = ''
+      try {
+        const resp = await captureRecap(tradeDate)
+        await this.loadRecapList()
+        if (forceApply || this.selectedDate === tradeDate) {
+          this.applyResponse(resp, tradeDate)
+          this.activeView = 'overview'
+        }
+        if (showSuccessToast) this.showToast('数据已更新')
+        return resp
+      } catch (err) {
+        this.captureErrorMsg = err.message
+        throw err
+      } finally {
+        this.capturingDate = ''
+      }
+    },
     async handleCalendarClick(day) {
-      if (!day.isTradingDay || this.capturing || day.isFuture) return
+      if (!day.isTradingDay || day.isFuture) return
 
       this.selectedDate = day.tradeDate
       this.setCalendarCursor(day.tradeDate)
+      this.error = ''
+
+      const hasExistingData = this.recaps.some(item => item.tradeDate === day.tradeDate)
+      if (hasExistingData) {
+        await this.loadRecap(day.tradeDate)
+      } else {
+        this.setEmptyState()
+      }
+
+      if (this.capturingDate) {
+        if (!hasExistingData) {
+          this.showToast(`正在采集 ${this.capturingDate}，完成后再采集 ${day.tradeDate}`)
+        }
+        return
+      }
 
       const isCurrentTradingDay = day.tradeDate === getCurrentTradingDate()
-      const hasExistingData = this.recaps.some(r => r.tradeDate === day.tradeDate)
-
       if (isCurrentTradingDay) {
-        // 交易日当日：直接采集替换，不弹窗
-        if (hasExistingData) {
-          try {
-            this.applyResponse(await getRecap(day.tradeDate))
-            this.activeView = 'overview'
-          } catch (_) {}
-        }
-        this.capturing = true
-        this.error = ''
-        try {
-          this.applyResponse(await captureRecap(day.tradeDate))
-          this.activeView = 'overview'
-          await this.loadRecapList()
-          this.showToast('数据已更新')
-        } catch (err) {
-          this.captureErrorMsg = err.message
-        } finally {
-          this.capturing = false
-        }
-      } else if (hasExistingData) {
-        // 历史日期且有旧数据：采集后比对，有变动弹窗展示详情
-        let oldResp = null
-        try { oldResp = await getRecap(day.tradeDate) } catch (_) {}
-
-        if (oldResp) {
-          this.applyResponse(oldResp)
-          this.activeView = 'overview'
-        }
-
-        this.capturing = true
-        this.error = ''
-        try {
-          const newResp = await captureRecap(day.tradeDate)
-
-          if (oldResp && !recapsAreDifferent(oldResp.report, newResp.report)) {
-            this.showToast('数据无变动，无需更新')
-            await this.loadRecapList()
-          } else if (oldResp) {
-            this.pendingOldRecap = oldResp.report
-            this.pendingNewRecap = newResp.report
-            this.pendingNewResponse = newResp
-            this.showOverwriteDialog = true
-          } else {
-            this.applyResponse(newResp)
-            this.activeView = 'overview'
-            await this.loadRecapList()
-          }
-        } catch (err) {
-          this.captureErrorMsg = err.message
-        } finally {
-          this.capturing = false
-        }
-      } else {
-        // 无旧数据：直接采集
-        await this.autoCapture(day.tradeDate)
+        await this.captureTradeDate(day.tradeDate, { forceApply: true, showSuccessToast: hasExistingData })
+        return
       }
-    },
 
-    async autoCapture(tradeDate) {
-      this.capturing = true
-      this.error = ''
+      if (!hasExistingData) {
+        await this.captureTradeDate(day.tradeDate, { forceApply: true })
+        return
+      }
+
+      let oldResp = null
       try {
-        this.applyResponse(await captureRecap(tradeDate))
-        this.activeView = 'overview'
-        await this.loadRecapList()
-      } catch (err) {
-        this.captureErrorMsg = err.message
-      } finally {
-        this.capturing = false
+        oldResp = await getRecap(day.tradeDate)
+      } catch (_) {
+        oldResp = null
+      }
+
+      if (!oldResp) {
+        await this.captureTradeDate(day.tradeDate, { forceApply: true })
+        return
+      }
+
+      try {
+        const newResp = await this.captureTradeDate(day.tradeDate)
+        const diffs = recapsDiffSummary(oldResp.report, newResp.report)
+        if (!diffs.length || !recapsAreDifferent(oldResp.report, newResp.report)) {
+          this.showToast('数据无变化，无需更新')
+          this.applyResponse(oldResp, day.tradeDate)
+          return
+        }
+
+        this.pendingOldRecap = oldResp.report
+        this.pendingNewRecap = newResp.report
+        this.pendingNewResponse = newResp
+        this.showOverwriteDialog = true
+      } catch (_) {
+        this.applyResponse(oldResp, day.tradeDate)
       }
     },
-
-    // ── 响应数据拆包 ──
-    applyResponse(resp) {
-      this.recap = resp.report
-      this.indicators = resp.indicators
-      this.trendPoints = resp.trendPoints
-    },
-
-    // ── 覆盖确认弹窗 ──
     confirmOverwrite() {
-      if (this.pendingNewResponse) this.applyResponse(this.pendingNewResponse)
+      if (this.pendingNewResponse) {
+        this.applyResponse(this.pendingNewResponse, this.selectedDate)
+      }
       this.showOverwriteDialog = false
       this.pendingOldRecap = null
       this.pendingNewRecap = null
@@ -314,19 +355,15 @@ export default {
       this.pendingNewResponse = null
       this.activeView = 'overview'
     },
-
-    // ── Toast ──
     showToast(msg) {
       this.toastMessage = msg
       if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toastMessage = '' }, 3000)
+      this.toastTimer = setTimeout(() => {
+        this.toastMessage = ''
+      }, 3000)
     },
-
-    // ── 自动采集（盘中） ──
     shouldAutoCapture() {
-      const tradingDate = getCurrentTradingDate()
-      if (this.selectedDate !== tradingDate) return false
-      if (this.capturing || this.loading) return false
+      if (this.capturingDate || this.loading) return false
       if (!isTradingWindowNow()) return false
       if (typeof document !== 'undefined' && document.hidden) return false
       return true
@@ -344,36 +381,16 @@ export default {
       if (!this.shouldAutoCapture()) return
       const now = Date.now()
       if (now - this.lastAutoCaptureStartedAt < 55 * 1000) return
-      this.lastAutoCaptureStartedAt = now
-      this.capturing = true
-      this.error = ''
-      try {
-        this.applyResponse(await captureRecap(this.selectedDate))
-        await this.loadRecapList()
-      } catch (error) {
-        this.error = error.message
-      } finally {
-        this.capturing = false
-      }
-    },
 
-    // ── 数据加载 ──
-    async loadRecapList() {
-      this.recaps = await listRecaps()
-    },
-    async loadRecap() {
-      if (!this.selectedDate) return
-      this.loading = true
-      this.error = ''
+      const tradeDate = getCurrentTradingDate()
+      this.lastAutoCaptureStartedAt = now
+
       try {
-        this.applyResponse(await getRecap(this.selectedDate))
-        this.activeView = 'overview'
-        this.setCalendarCursor(this.selectedDate)
+        await this.captureTradeDate(tradeDate, { forceApply: this.selectedDate === tradeDate })
       } catch (error) {
-        this.recap = null
-        this.error = error.message
-      } finally {
-        this.loading = false
+        if (this.selectedDate === tradeDate) {
+          this.error = error.message
+        }
       }
     }
   }

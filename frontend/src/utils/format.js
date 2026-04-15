@@ -1,5 +1,3 @@
-// 数值解析、单元格格式化
-
 export function toBoardHeight(value) {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : 0
@@ -8,8 +6,10 @@ export function toBoardHeight(value) {
 export function parseNumericValue(value) {
   if (value === null || value === undefined || value === '') return null
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
+
   const text = String(value).trim()
   if (!text || text === '-') return null
+
   if (text.endsWith('%')) {
     const numeric = Number(text.replace('%', ''))
     return Number.isFinite(numeric) ? numeric : null
@@ -22,6 +22,7 @@ export function parseNumericValue(value) {
     const numeric = Number(text.replace('万', ''))
     return Number.isFinite(numeric) ? numeric * 10000 : null
   }
+
   const numeric = Number(text)
   return Number.isFinite(numeric) ? numeric : null
 }
@@ -43,9 +44,9 @@ export function cellClass(column, item) {
 
 export function formatSealTime(raw) {
   if (!raw || raw.length < 4) return raw || '-'
-  // "093030" → "09:30:30", "1030" → "10:30"
-  const s = String(raw).padStart(6, '0')
-  return s.slice(0, 2) + ':' + s.slice(2, 4) + ':' + s.slice(4, 6)
+  if (String(raw).includes(':')) return raw
+  const value = String(raw).padStart(6, '0')
+  return `${value.slice(0, 2)}:${value.slice(2, 4)}:${value.slice(4, 6)}`
 }
 
 export function displayValue(column, item) {

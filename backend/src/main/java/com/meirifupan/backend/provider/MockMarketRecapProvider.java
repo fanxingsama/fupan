@@ -1,6 +1,7 @@
 package com.meirifupan.backend.provider;
 
 import com.meirifupan.backend.model.DailyRecapReport;
+import com.meirifupan.backend.model.BoardIndexSnapshot;
 import com.meirifupan.backend.model.MarketStats;
 import com.meirifupan.backend.model.SectorRecord;
 import com.meirifupan.backend.model.StockRecord;
@@ -34,7 +35,12 @@ public class MockMarketRecapProvider implements MarketRecapProvider {
         return new DailyRecapReport(
                 tradeDate,
                 OffsetDateTime.now(),
-                new MarketStats(3210, 1826, 154, 42),
+                new MarketStats(3210, 1826, 154, 42, "1.82万亿"),
+                List.of(
+                        new BoardIndexSnapshot("mainBoard", "主板(上证指数)", "sh000001", "3210.33", "+12.85", "+0.40%"),
+                        new BoardIndexSnapshot("chiNext", "创业板(创业板指)", "sz399006", "1855.42", "-18.23", "-0.97%"),
+                        new BoardIndexSnapshot("starBoard", "科创板(科创50)", "sh000688", "812.61", "+6.12", "+0.76%")
+                ),
                 List.of(
                         stock("002123", "Mengwang Tech", "", "6.12%", "13.62", "Telecom Equipment", "AI Apps; Cloud", "1.132B", "7.530B", "", "", "", "", "", "", "broken-limit"),
                         stock("603456", "Jiuzhou Pharma", "", "4.75%", "18.14", "Chemical Pharma", "Innovative Drug", "0.824B", "10.920B", "", "", "", "", "", "", "broken-limit")
@@ -54,6 +60,10 @@ public class MockMarketRecapProvider implements MarketRecapProvider {
                 List.of(
                         stock("301488", "Haoen Auto", "", "", "68.21", "Auto Parts", "ADAS", "0.710B", "2.855B", "ADAS", "0.081B", "", "", "", "", ""),
                         stock("603778", "Guosheng Tech", "", "", "9.41", "Power Equipment", "PV", "0.506B", "3.143B", "PV Rebound", "0.062B", "", "", "", "", "")
+                ),
+                List.of(
+                        stock("001314", "Edo Info", "1", "2.11%", "42.61", "", "", "0.641B", "", "", "", "", "", "7.52%", "41.88", "feedback"),
+                        stock("603716", "Sail Medical", "1", "-1.23%", "10.58", "", "", "0.724B", "", "", "", "", "", "6.18%", "9.98", "feedback")
                 ),
                 List.of(
                         stock("600804", "Risk Corp", "", "", "4.01", "", "Cloud", "", "", "Earnings Pressure", "", "", "", "", "", ""),

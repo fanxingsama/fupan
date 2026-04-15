@@ -1,12 +1,22 @@
 <template>
   <div v-if="recap">
     <div class="page-header-block">
-      <p class="eyebrow">总览</p>
+      <p class="eyebrow">交易驾驶舱</p>
       <h2>{{ recap.tradeDate }}</h2>
-      <p class="muted">{{ recap.notes }}</p>
+      <p class="muted">{{ tradePlan?.headline || recap.notes }}</p>
     </div>
 
-    <!-- ▶ 风险预警信号 -->
+    <section v-if="boardIndexes.length" class="board-index-grid">
+      <article v-for="item in boardIndexes" :key="item.key || item.label" class="board-index-card">
+        <span class="dash-label">{{ item.label }}</span>
+        <strong class="board-index-latest">{{ item.latest }}</strong>
+        <div class="board-index-change" :class="percentClass(item.changePercent)">
+          <span>{{ item.changePercent || '-' }}</span>
+          <small>{{ item.changeAmount ? `${item.changeAmount} 点` : '-' }}</small>
+        </div>
+      </article>
+    </section>
+
     <div v-if="riskSignals.length" class="risk-signal-bar">
       <span
         v-for="(sig, idx) in riskSignals"
@@ -16,47 +26,183 @@
       >{{ sig.text }}</span>
     </div>
 
-    <!-- ▶ 情绪驾驶舱 -->
+    <section class="battlefield-grid">
+      <article class="panel battle-card battle-card-hero">
+        <span class="eyebrow">次日作战结论</span>
+        <h3>{{ tradePlan?.headline || '等待复盘结果' }}</h3>
+        <p class="muted">{{ tradePlan?.executionSummary }}</p>
+        <div class="battle-meta">
+          <div>
+            <span>市场倾向</span>
+            <strong>{{ tradePlan?.marketBias || '-' }}</strong>
+          </div>
+          <div>
+            <span>主做模式</span>
+            <strong>{{ tradePlan?.tradeMode || '-' }}</strong>
+          </div>
+          <div>
+            <span>仓位建议</span>
+            <strong>{{ tradePlan?.positionAdvice || '-' }}</strong>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel battle-card">
+        <span class="eyebrow">重点关注</span>
+        <ul class="text-list">
+          <li v-for="(item, index) in tradePlan?.nextDayFocus || []" :key="'focus-' + index">{{ item }}</li>
+        </ul>
+      </article>
+
+      <article class="panel battle-card">
+        <span class="eyebrow">风险提醒</span>
+        <ul class="text-list">
+          <li v-for="(item, index) in tradePlan?.riskFocus || []" :key="'risk-' + index">{{ item }}</li>
+        </ul>
+      </article>
+    </section>
+
     <div class="dashboard-grid">
-      <!-- 情绪周期 -->
       <article class="dash-card dash-card-phase">
         <span class="dash-label">情绪周期</span>
         <strong class="dash-value" :style="{ color: emotionPhase.color }">{{ emotionPhase.label }}</strong>
         <span class="dash-sub">{{ phaseDescription }}</span>
       </article>
-      <!-- 封板率 -->
       <article class="dash-card">
         <span class="dash-label">封板率</span>
         <strong class="dash-value" :class="sealRateClass">{{ sealRateDisplay }}</strong>
-        <span class="dash-sub">成功封板 / (封板+炸板)</span>
+        <span class="dash-sub">成功封板 / (封板 + 炸板)</span>
       </article>
-      <!-- 涨跌停比 -->
       <article class="dash-card">
         <span class="dash-label">涨跌停比</span>
         <strong class="dash-value">{{ limitRatioDisplay }}</strong>
         <span class="dash-sub">涨停 {{ limitUpTotal }} / 跌停 {{ limitDownTotal }}</span>
       </article>
-      <!-- 赚钱效应 -->
       <article class="dash-card">
-        <span class="dash-label">昨涨停溢价率</span>
+        <span class="dash-label">昨日涨停溢价</span>
         <strong class="dash-value" :class="premiumClass">{{ premiumDisplay }}</strong>
-        <span class="dash-sub">昨涨停今日平均表现</span>
+        <span class="dash-sub">昨日涨停股今日平均表现</span>
       </article>
-      <!-- 昨涨停上涨比例 -->
       <article class="dash-card">
-        <span class="dash-label">昨涨停上涨占比</span>
-        <strong class="dash-value">{{ winRateDisplay }}</strong>
-        <span class="dash-sub">上涨家数 / 昨涨停总数</span>
+        <span class="dash-label">投机热度分</span>
+        <strong class="dash-value">{{ scoreDisplay(indicators?.speculationScore) }}</strong>
+        <span class="dash-sub">封板率、涨停家数、连板高度综合</span>
       </article>
-      <!-- 昨炸板表现 -->
       <article class="dash-card">
-        <span class="dash-label">昨炸板今日表现</span>
-        <strong class="dash-value" :class="brokenAvgClass">{{ brokenAvgDisplay }}</strong>
-        <span class="dash-sub">昨日炸板票今日均涨幅</span>
+        <span class="dash-label">接力承接分</span>
+        <strong class="dash-value">{{ scoreDisplay(indicators?.continuationScore) }}</strong>
+        <span class="dash-sub">昨日涨停溢价与承接强度综合</span>
+      </article>
+      <article class="dash-card">
+        <span class="dash-label">市场宽度</span>
+        <strong class="dash-value">{{ scoreDisplay(indicators?.breadthScore) }}</strong>
+        <span class="dash-sub">上涨家数 / 涨跌家数</span>
+      </article>
+      <article class="dash-card">
+        <span class="dash-label">最高板</span>
+        <strong class="dash-value">{{ currentMaxBoardHeight }} 板</strong>
+        <span class="dash-sub">观察高标是否仍在抬高度</span>
       </article>
     </div>
 
-    <!-- ▶ 快速统计 -->
+    <section v-if="themes.length" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>主线强度</h2>
+          <p class="muted section-subtitle">不只是看板块涨跌，而是帮助判断哪些题材值得明天优先盯。</p>
+        </div>
+      </div>
+      <div class="theme-grid">
+        <article v-for="theme in themes" :key="theme.name" class="theme-card">
+          <div class="theme-head">
+            <h3>{{ theme.name }}</h3>
+            <span class="theme-phase">{{ theme.phase }}</span>
+          </div>
+          <strong class="theme-score">{{ theme.score }}</strong>
+          <p>{{ theme.comment }}</p>
+        </article>
+      </div>
+    </section>
+
+    <AiSummaryPanel :trade-date="recap.tradeDate" />
+
+    <section v-if="watchStocks.length" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>重点票预案</h2>
+          <p class="muted section-subtitle">把复盘结果直接转成“明天看谁、怎么做、什么情况下放弃”。</p>
+        </div>
+      </div>
+      <div class="watchlist-grid">
+        <article v-for="stock in watchStocks" :key="stock.code + stock.name" class="watch-card">
+          <div class="watch-card-head">
+            <div>
+              <h3>{{ stock.name }}</h3>
+              <small>{{ stock.code }} · {{ stock.theme }}</small>
+            </div>
+            <span class="watch-score">{{ stock.score }}</span>
+          </div>
+          <div class="tag-list">
+            <span class="tag">{{ stock.role }}</span>
+          </div>
+          <p class="watch-summary">{{ stock.summary }}</p>
+          <div class="watch-plan-row">
+            <div>
+              <span class="field-label">方案 A</span>
+              <p>{{ stock.planA }}</p>
+            </div>
+            <div>
+              <span class="field-label">方案 B</span>
+              <p>{{ stock.planB }}</p>
+            </div>
+          </div>
+          <p class="watch-risk">{{ stock.riskNote }}</p>
+        </article>
+      </div>
+    </section>
+
+    <section v-if="candidatePools.length" class="pool-grid">
+      <article v-for="pool in candidatePools" :key="pool.key" class="panel">
+        <div class="section-head">
+          <div>
+            <h2>{{ pool.title }}</h2>
+            <p class="muted section-subtitle">{{ pool.description }}</p>
+          </div>
+        </div>
+        <div class="mini-stock-list">
+          <button
+            v-for="stock in pool.stocks"
+            :key="pool.key + stock.code + stock.name"
+            type="button"
+            class="mini-stock-item"
+          >
+            <div>
+              <strong>{{ stock.name }}</strong>
+              <small>{{ stock.theme }} · {{ stock.role }}</small>
+            </div>
+            <span>{{ stock.score }}</span>
+          </button>
+          <p v-if="!pool.stocks.length" class="muted">暂无符合条件的标的</p>
+        </div>
+      </article>
+    </section>
+
+    <section v-if="schedule.length" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>盘前到尾盘节奏</h2>
+          <p class="muted section-subtitle">按时段拆开观察重点，避免临盘信息过载。</p>
+        </div>
+      </div>
+      <div class="schedule-grid">
+        <article v-for="item in schedule" :key="item.window" class="schedule-card">
+          <span class="schedule-window">{{ item.window }}</span>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.focus }}</p>
+        </article>
+      </div>
+    </section>
+
     <div class="summary-grid summary-grid-3">
       <article v-for="card in overviewCards" :key="card.label" class="summary-card">
         <span>{{ card.label }}</span>
@@ -65,30 +211,28 @@
     </div>
 
     <section class="overview-stack">
-      <!-- Row 1: 连板梯队 + 趋势 -->
       <div class="chart-row chart-row-2">
         <article class="panel chart-panel">
           <div class="chart-panel-head">
             <div>
               <h2>连板梯队</h2>
-              <small>当日涨停板梯队结构</small>
+              <small>看高标是否断层，低位是否持续补充。</small>
             </div>
-            <strong>最高 {{ currentMaxBoardHeight }}板</strong>
+            <strong>{{ currentMaxBoardHeight }} 板</strong>
           </div>
           <div ref="ladderChart" class="chart-box"></div>
         </article>
         <article class="panel chart-panel">
           <div class="chart-panel-head">
             <div>
-              <h2>封板率 &amp; 涨停数趋势</h2>
-              <small>核心情绪指标联动</small>
+              <h2>封板率与涨停数趋势</h2>
+              <small>情绪指标共振时，进攻容错率更高。</small>
             </div>
           </div>
           <div ref="sealRateTrendChart" class="chart-box"></div>
         </article>
       </div>
 
-      <!-- Row 2: 原有三条趋势 -->
       <div class="chart-row">
         <article class="panel chart-panel">
           <div class="chart-panel-head">
@@ -103,55 +247,8 @@
         <article class="panel chart-panel">
           <div class="chart-panel-head">
             <div>
-              <h2>连板高度趋势</h2>
-              <small>观察情绪高度变化</small>
-            </div>
-            <strong>{{ currentMaxBoardHeight }}</strong>
-          </div>
-          <div ref="heightTrendChart" class="chart-box"></div>
-        </article>
-        <article class="panel chart-panel">
-          <div class="chart-panel-head">
-            <div>
-              <h2>首板数量趋势</h2>
-              <small>首板数量变化</small>
-            </div>
-            <strong>{{ recap.marketStats.firstLimitCount }}</strong>
-          </div>
-          <div ref="firstLimitTrendChart" class="chart-box"></div>
-        </article>
-      </div>
-
-      <!-- Row 3: 新增 炸板数趋势 + 昨涨停溢价趋势 -->
-      <div class="chart-row chart-row-2" v-if="trendPoints.length >= 2">
-        <article class="panel chart-panel">
-          <div class="chart-panel-head">
-            <div>
-              <h2>炸板数趋势</h2>
-              <small>炸板突增 = 分歧加剧</small>
-            </div>
-            <strong>{{ brokenCount }}</strong>
-          </div>
-          <div ref="brokenTrendChart" class="chart-box"></div>
-        </article>
-        <article class="panel chart-panel">
-          <div class="chart-panel-head">
-            <div>
-              <h2>昨涨停溢价趋势</h2>
-              <small>判断追高风险演变</small>
-            </div>
-          </div>
-          <div ref="premiumTrendChart" class="chart-box"></div>
-        </article>
-      </div>
-
-      <!-- Row 4: 板块分析 -->
-      <div class="chart-row">
-        <article class="panel chart-panel">
-          <div class="chart-panel-head">
-            <div>
-              <h2>首板集中板块</h2>
-              <small>点击板块查看涨停个股</small>
+              <h2>主线首板聚焦</h2>
+              <small>点击板块查看对应的首板股票。</small>
             </div>
           </div>
           <div ref="focusChart" class="chart-box"></div>
@@ -160,27 +257,18 @@
           <div class="chart-panel-head">
             <div>
               <h2>上涨板块前列</h2>
-              <small>按当前复盘数据聚合</small>
+              <small>辅助判断主线和轮动方向。</small>
             </div>
           </div>
           <div ref="upSectorChart" class="chart-box"></div>
-        </article>
-        <article class="panel chart-panel">
-          <div class="chart-panel-head">
-            <div>
-              <h2>下跌板块前列</h2>
-              <small>弱势方向更好识别</small>
-            </div>
-          </div>
-          <div ref="downSectorChart" class="chart-box"></div>
         </article>
       </div>
     </section>
 
     <article v-if="selectedSector" class="panel focus-detail-panel">
       <div class="section-head">
-        <h2>「{{ selectedSector }}」首板涨停个股</h2>
-        <button class="close-btn" @click="selectedSector = null">✕ 关闭</button>
+        <h2>{{ selectedSector }} 首板涨停股</h2>
+        <button class="close-btn" @click="selectedSector = null">关闭</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -206,15 +294,25 @@
 </template>
 
 <script>
-import { cellClass, displayValue } from '../utils/format'
+import { cellClass, displayValue, percentClass } from '../utils/format'
 import { FOCUS_DETAIL_COLUMNS } from '../utils/columns'
-import { buildTrendOption, buildDualTrendOption, buildBarOption, buildFocusOption, buildLadderOption, ensureChart } from '../utils/chart'
+import AiSummaryPanel from './AiSummaryPanel.vue'
+import {
+  buildTrendOption,
+  buildDualTrendOption,
+  buildBarOption,
+  buildFocusOption,
+  buildLadderOption,
+  ensureChart
+} from '../utils/chart'
 
 export default {
   name: 'OverviewPage',
+  components: { AiSummaryPanel },
   props: {
     recap: { type: Object, default: null },
     indicators: { type: Object, default: null },
+    tradePlan: { type: Object, default: null },
     trendPoints: { type: Array, default: () => [] }
   },
   data() {
@@ -224,81 +322,73 @@ export default {
     }
   },
   computed: {
+    boardIndexes() {
+      return this.recap?.boardIndexes || []
+    },
+    riskSignals() {
+      return this.indicators?.riskSignals || []
+    },
+    emotionPhase() {
+      if (!this.indicators) return { label: '数据不足', color: '#94a3b8' }
+      return { label: this.indicators.emotionLabel, color: this.indicators.emotionColor }
+    },
+    phaseDescription() {
+      return this.indicators?.emotionDescription || ''
+    },
+    limitUpTotal() {
+      return this.indicators?.limitUpTotal || 0
+    },
+    limitDownTotal() {
+      return this.indicators?.limitDownTotal || 0
+    },
+    currentMaxBoardHeight() {
+      return this.indicators?.maxBoardHeight || 0
+    },
+    sealRateDisplay() {
+      return this.indicators?.sealRate != null ? `${this.indicators.sealRate}%` : '-'
+    },
+    sealRateClass() {
+      const value = this.indicators?.sealRate
+      if (value == null) return ''
+      if (value >= 75) return 'indicator-good'
+      if (value < 55) return 'indicator-bad'
+      return 'indicator-warn'
+    },
+    limitRatioDisplay() {
+      return this.indicators?.limitRatio != null ? `${this.indicators.limitRatio} : 1` : '-'
+    },
+    premiumDisplay() {
+      const value = this.indicators?.yesterdayLimitPremium
+      if (value == null) return '-'
+      return `${value > 0 ? '+' : ''}${value}%`
+    },
+    premiumClass() {
+      const value = this.indicators?.yesterdayLimitPremium
+      if (value == null) return ''
+      if (value >= 1) return 'indicator-good'
+      if (value < -1) return 'indicator-bad'
+      return 'indicator-warn'
+    },
     overviewCards() {
       if (!this.recap) return []
       return [
         { label: '上涨家数', value: this.recap.marketStats.upCount },
         { label: '下跌家数', value: this.recap.marketStats.downCount },
-        { label: '首板数量', value: this.recap.marketStats.firstLimitCount }
+        { label: '首板数量', value: this.recap.marketStats.firstLimitCount },
+        { label: '炸板数量', value: this.indicators?.brokenCount || 0 }
       ]
     },
-    currentMaxBoardHeight() {
-      return this.indicators ? this.indicators.maxBoardHeight : 0
+    themes() {
+      return this.tradePlan?.primaryThemes || []
     },
-    brokenCount() {
-      return this.indicators ? this.indicators.brokenCount : 0
+    watchStocks() {
+      return this.tradePlan?.watchStocks || []
     },
-    limitUpTotal() {
-      return this.indicators ? this.indicators.limitUpTotal : 0
+    candidatePools() {
+      return this.tradePlan?.candidatePools || []
     },
-    limitDownTotal() {
-      return this.indicators ? this.indicators.limitDownTotal : 0
-    },
-    sealRateDisplay() {
-      const v = this.indicators?.sealRate
-      return v != null ? v + '%' : '-'
-    },
-    sealRateClass() {
-      const v = this.indicators?.sealRate
-      if (v == null) return ''
-      if (v >= 75) return 'indicator-good'
-      if (v < 55) return 'indicator-bad'
-      return 'indicator-warn'
-    },
-    limitRatioDisplay() {
-      const v = this.indicators?.limitRatio
-      return v != null ? v + ' : 1' : '-'
-    },
-    premiumDisplay() {
-      const v = this.indicators?.yesterdayLimitPremium
-      if (v == null) return '-'
-      return (v > 0 ? '+' : '') + v + '%'
-    },
-    premiumClass() {
-      const v = this.indicators?.yesterdayLimitPremium
-      if (v == null) return ''
-      if (v >= 1) return 'indicator-good'
-      if (v < -1) return 'indicator-bad'
-      return 'indicator-warn'
-    },
-    winRateDisplay() {
-      const v = this.indicators?.yesterdayLimitWinRate
-      return v != null ? v + '%' : '-'
-    },
-    brokenAvgDisplay() {
-      const v = this.indicators?.yesterdayBrokenAvg
-      if (v == null) return '-'
-      return (v > 0 ? '+' : '') + v + '%'
-    },
-    brokenAvgClass() {
-      const v = this.indicators?.yesterdayBrokenAvg
-      if (v == null) return ''
-      if (v >= 0) return 'indicator-good'
-      return 'indicator-bad'
-    },
-    emotionPhase() {
-      if (!this.indicators) return { phase: 'unknown', label: '数据不足', color: '#94a3b8' }
-      return {
-        phase: this.indicators.emotionPhase,
-        label: this.indicators.emotionLabel,
-        color: this.indicators.emotionColor
-      }
-    },
-    phaseDescription() {
-      return this.indicators?.emotionDescription || ''
-    },
-    riskSignals() {
-      return this.indicators?.riskSignals || []
+    schedule() {
+      return this.tradePlan?.schedule || []
     },
     boardLadder() {
       return this.indicators?.boardLadder || []
@@ -308,9 +398,8 @@ export default {
     },
     focusSectorStocks() {
       if (!this.recap || !this.selectedSector) return []
-      const sector = this.selectedSector
       return (this.recap.firstLimitToday || []).filter(item =>
-        item.industry === sector || item.concept === sector
+        item.industry === this.selectedSector || item.concept === this.selectedSector
       )
     }
   },
@@ -329,70 +418,63 @@ export default {
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.resizeCharts)
-    Object.values(this.chartMap).forEach(c => { try { c.dispose() } catch (_) {} })
+    Object.values(this.chartMap).forEach(chart => {
+      try { chart.dispose() } catch (_) {}
+    })
     this.chartMap = {}
   },
   methods: {
-    getCellClass(col, item) { return cellClass(col, item) },
-    getDisplayValue(col, item) { return displayValue(col, item) },
+    percentClass,
+    scoreDisplay(value) {
+      return value != null ? (value.toFixed ? value.toFixed(1) : value) : '-'
+    },
+    getCellClass(col, item) {
+      return cellClass(col, item)
+    },
+    getDisplayValue(col, item) {
+      return displayValue(col, item)
+    },
     resizeCharts() {
-      Object.values(this.chartMap).forEach(c => { try { c.resize() } catch (_) {} })
+      Object.values(this.chartMap).forEach(chart => {
+        try { chart.resize() } catch (_) {}
+      })
     },
     renderCharts() {
       if (!this.recap) return
 
-      // 连板梯队图
-      const lc = ensureChart(this.chartMap, 'ladder', this.$refs.ladderChart)
-      if (lc) lc.setOption(buildLadderOption(this.boardLadder), true)
+      const ladderChart = ensureChart(this.chartMap, 'ladder', this.$refs.ladderChart)
+      if (ladderChart) ladderChart.setOption(buildLadderOption(this.boardLadder), true)
 
-      // 趋势图（数据直接来自后端 trendPoints）
       if (this.trendPoints.length) {
-        const dates = this.trendPoints.map(p => p.tradeDate.slice(5))
-        const upCounts = this.trendPoints.map(p => p.upCount)
-        const heights = this.trendPoints.map(p => p.maxBoardHeight)
-        const firstLimits = this.trendPoints.map(p => p.firstLimitCount)
-        const sealRates = this.trendPoints.map(p => p.sealRate)
-        const limitTotals = this.trendPoints.map(p => p.limitUpTotal)
-        const brokenCounts = this.trendPoints.map(p => p.brokenCount)
-        const premiums = this.trendPoints.map(p => p.yesterdayLimitPremium)
+        const dates = this.trendPoints.map(point => point.tradeDate.slice(5))
+        const upCounts = this.trendPoints.map(point => point.upCount)
+        const sealRates = this.trendPoints.map(point => point.sealRate)
+        const limitTotals = this.trendPoints.map(point => point.limitUpTotal)
 
-        const c1 = ensureChart(this.chartMap, 'upTrend', this.$refs.upTrendChart)
-        const c2 = ensureChart(this.chartMap, 'heightTrend', this.$refs.heightTrendChart)
-        const c3 = ensureChart(this.chartMap, 'firstLimitTrend', this.$refs.firstLimitTrendChart)
+        const upTrend = ensureChart(this.chartMap, 'upTrend', this.$refs.upTrendChart)
+        const sealRateTrend = ensureChart(this.chartMap, 'sealRateTrend', this.$refs.sealRateTrendChart)
 
-        if (c1) c1.setOption(buildTrendOption(upCounts, dates, '#f97316'), true)
-        if (c2) c2.setOption(buildTrendOption(heights, dates, '#14213d'), true)
-        if (c3) c3.setOption(buildTrendOption(firstLimits, dates, '#22c55e'), true)
-
-        const sr = ensureChart(this.chartMap, 'sealRateTrend', this.$refs.sealRateTrendChart)
-        if (sr) sr.setOption(buildDualTrendOption(sealRates, limitTotals, dates, '#8b5cf6', '#f97316', '封板率%', '涨停数'), true)
-
-        if (this.$refs.brokenTrendChart) {
-          const bc = ensureChart(this.chartMap, 'brokenTrend', this.$refs.brokenTrendChart)
-          if (bc) bc.setOption(buildTrendOption(brokenCounts, dates, '#ef4444'), true)
-        }
-
-        if (this.$refs.premiumTrendChart) {
-          const pc = ensureChart(this.chartMap, 'premiumTrend', this.$refs.premiumTrendChart)
-          if (pc) pc.setOption(buildTrendOption(premiums, dates, '#0ea5e9'), true)
+        if (upTrend) upTrend.setOption(buildTrendOption(upCounts, dates, '#f97316'), true)
+        if (sealRateTrend) {
+          sealRateTrend.setOption(
+            buildDualTrendOption(sealRates, limitTotals, dates, '#8b5cf6', '#f97316', '封板率', '涨停数'),
+            true
+          )
         }
       }
 
-      // 板块图
-      const fc = ensureChart(this.chartMap, 'focus', this.$refs.focusChart)
-      const uc = ensureChart(this.chartMap, 'upSector', this.$refs.upSectorChart)
-      const dc = ensureChart(this.chartMap, 'downSector', this.$refs.downSectorChart)
+      const focusChart = ensureChart(this.chartMap, 'focus', this.$refs.focusChart)
+      const upSectorChart = ensureChart(this.chartMap, 'upSector', this.$refs.upSectorChart)
 
-      if (fc) {
-        fc.setOption(buildFocusOption(this.recap.firstLimitSectorFocus || {}), true)
-        fc.off('click')
-        fc.on('click', (params) => {
+      if (focusChart) {
+        focusChart.setOption(buildFocusOption(this.recap.firstLimitSectorFocus || {}), true)
+        focusChart.off('click')
+        focusChart.on('click', params => {
           if (params.name) this.selectedSector = params.name
         })
       }
-      if (uc) uc.setOption(buildBarOption(this.recap.topUpSectors || [], '#fb7185'), true)
-      if (dc) dc.setOption(buildBarOption(this.recap.topDownSectors || [], '#14b8a6', true), true)
 
+      if (upSectorChart) upSectorChart.setOption(buildBarOption(this.recap.topUpSectors || [], '#fb7185'), true)
       this.resizeCharts()
     }
   }

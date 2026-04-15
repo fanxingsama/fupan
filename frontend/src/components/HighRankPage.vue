@@ -1,7 +1,7 @@
 <template>
   <div v-if="recap">
     <div class="page-header-block">
-      <p class="eyebrow">高标板块</p>
+      <p class="eyebrow">高标观察</p>
       <h2>{{ recap.tradeDate }}</h2>
     </div>
     <DataTable
@@ -29,8 +29,8 @@ export default {
     sections() {
       if (!this.recap) return []
       return [
-        { id: 'main-board', title: '主板 10日涨幅前40', rows: this.recap.top10DayGainMainBoard || [], columns: STANDARD_COLUMNS },
-        { id: 'gem-star', title: '创业板/科创板 10日涨幅前40', rows: this.recap.top10DayGainGemStar || [], columns: STANDARD_COLUMNS }
+        { id: 'main-board', title: '主板 10 日涨幅前列', rows: this.recap.top10DayGainMainBoard || [], columns: STANDARD_COLUMNS },
+        { id: 'gem-star', title: '创业板 / 科创板 10 日涨幅前列', rows: this.recap.top10DayGainGemStar || [], columns: STANDARD_COLUMNS }
       ]
     }
   }

@@ -4,9 +4,12 @@ import com.meirifupan.backend.model.CaptureRequest;
 import com.meirifupan.backend.model.DailyRecapReport;
 import com.meirifupan.backend.model.RecapDetailResponse;
 import com.meirifupan.backend.model.RecapListItem;
+import com.meirifupan.backend.model.AiSummary;
 import com.meirifupan.backend.service.IndicatorService;
 import com.meirifupan.backend.service.RecapCaptureService;
 import com.meirifupan.backend.service.RecapStorageService;
+import com.meirifupan.backend.service.AiSummaryService;
+import com.meirifupan.backend.service.TradePlanService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,13 +41,19 @@ public class RecapController {
     private final RecapStorageService storageService;
     private final RecapCaptureService captureService;
     private final IndicatorService indicatorService;
+    private final TradePlanService tradePlanService;
+    private final AiSummaryService aiSummaryService;
 
     public RecapController(RecapStorageService storageService,
                            RecapCaptureService captureService,
-                           IndicatorService indicatorService) {
+                           IndicatorService indicatorService,
+                           TradePlanService tradePlanService,
+                           AiSummaryService aiSummaryService) {
         this.storageService = storageService;
         this.captureService = captureService;
         this.indicatorService = indicatorService;
+        this.tradePlanService = tradePlanService;
+        this.aiSummaryService = aiSummaryService;
     }
 
     @GetMapping
@@ -72,15 +81,26 @@ public class RecapController {
         return buildResponse(report);
     }
 
+    @GetMapping("/{tradeDate}/ai-summary")
+    public AiSummary aiSummary(@PathVariable LocalDate tradeDate, @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean refresh) {
+        DailyRecapReport report = storageService.findByDate(tradeDate)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到该日期复盘"));
+        List<DailyRecapReport> recentReports = storageService.loadRecent(report.tradeDate(), 20);
+        var indicators = indicatorService.calculate(report, recentReports);
+        var tradePlan = tradePlanService.buildPlan(report, indicators);
+        return aiSummaryService.generateOrLoad(report, indicators, tradePlan, refresh);
+    }
+
     /**
      * 加载最近的历史报告，计算指标和趋势，打包为统一响应体。
      */
     private RecapDetailResponse buildResponse(DailyRecapReport report) {
         List<DailyRecapReport> recentReports = storageService.loadRecent(report.tradeDate(), 20);
         var indicators = indicatorService.calculate(report, recentReports);
+        var tradePlan = tradePlanService.buildPlan(report, indicators);
         var trendPoints = recentReports.stream()
                 .map(indicatorService::toTrendPoint)
                 .toList();
-        return new RecapDetailResponse(report, indicators, trendPoints);
+        return new RecapDetailResponse(report, indicators, tradePlan, trendPoints);
     }
 }

@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: daily-recap-backend
+  datasource:
+    url: jdbc:sqlite:recap.db
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
 
 recap:
   storage-root: data
@@ -11,3 +17,14 @@ recap:
   python-executable: .venv/Scripts/python.exe
   collector-script: scripts/collect_akshare.py
   sleep-seconds: 1.2
+
+ai:
+  enabled: false
+  provider: minimax
+  api-key: ${AI_API_KEY:}
+  base-url: ${AI_BASE_URL:https://api.minimaxi.com/v1/text/chatcompletion_v2}
+  model: ${AI_MODEL:MiniMax-Text-01}
+  summary-storage-root: ai-summaries
+
+trade-journal:
+  storage-root: trade-journal

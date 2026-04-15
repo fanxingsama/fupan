@@ -122,6 +122,25 @@ def format_amount(value: Any) -> str:
     return f"{number:.2f}"
 
 
+def parse_amount_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        return float(value)
+    text = clean_text(value).replace(",", "")
+    if not text:
+        return None
+    if text.endswith(YI):
+        number = to_float(text[:-1])
+        return None if number is None else number * 100000000
+    if text.endswith(WAN):
+        number = to_float(text[:-1])
+        return None if number is None else number * 10000
+    return to_float(text)
+
+
 def parse_board_height_value(value: Any) -> int:
     number = to_float(value)
     return int(number) if number is not None else 0
@@ -319,6 +338,41 @@ def quote_from_market_row(row: dict[str, Any]) -> dict[str, str]:
         "floatMarketValue": format_amount(first_present(row, K_FLOAT_MV)),
         "turnoverRate": format_percent(first_present(row, K_TURNOVER, K_CONT_TURNOVER)),
     }
+
+
+INDEX_TARGETS = [
+    ("mainBoard", "主板(上证指数)", "sh000001"),
+    ("chiNext", "创业板(创业板指)", "sz399006"),
+    ("starBoard", "科创板(科创50)", "sh000688"),
+]
+
+
+def map_board_indexes(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    if not rows:
+        return []
+
+    index_by_code: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        code = clean_text(first_present(row, K_CODE))
+        if code:
+            index_by_code[code] = row
+
+    result: list[dict[str, str]] = []
+    for key, label, code in INDEX_TARGETS:
+        row = index_by_code.get(code)
+        if not row:
+            continue
+        result.append(
+            {
+                "key": key,
+                "label": label,
+                "code": code,
+                "latest": format_price(first_present(row, K_LATEST)),
+                "changeAmount": format_price(first_present(row, "涨跌额")),
+                "changePercent": format_percent(first_present(row, K_CHANGE)),
+            }
+        )
+    return result
 
 
 def stock_record(
@@ -523,6 +577,7 @@ def map_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
                 reason=clean_text(first_present(row, K_LIMIT_STAT)),
                 seal_amount=format_amount(first_present(row, K_SEAL_FUND)),
                 turnover_rate=format_percent(first_present(row, K_TURNOVER)),
+                amplitude=format_percent(first_present(row, K_AMPLITUDE)),
                 extra_tag=clean_text(first_present(row, K_LAST_LIMIT_TIME, K_FIRST_LIMIT_TIME)),
             )
         )
@@ -536,6 +591,10 @@ def map_first_limit(limit_up_rows: list[dict[str, str]]) -> list[dict[str, str]]
 
 def map_consecutive_limit(limit_up_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return [row for row in limit_up_rows if parse_board_height_value(row.get("boardHeight")) >= 2]
+
+
+def map_previous_first_limit(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return [row for row in map_previous_limit_up(rows) if row.get("boardHeight") == "1"]
 
 
 def map_broken_limit(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -750,8 +809,7 @@ def is_main_board(code: str) -> bool:
 def map_top_10_day(
     rows: list[dict[str, Any]],
     matcher: Callable[[str], bool],
-    ak: Any,
-    trade_date_em: str,
+    market_index: dict[str, dict[str, Any]],
 ) -> list[dict[str, str]]:
     filtered: list[dict[str, Any]] = []
     for row in rows:
@@ -770,25 +828,20 @@ def map_top_10_day(
         )
     filtered.sort(key=lambda item: item["changeValue"], reverse=True)
     top_items = filtered[:10]
-    quote_cache: dict[str, dict[str, str]] = {}
-    profile_cache: dict[str, dict[str, str]] = {}
     result: list[dict[str, str]] = []
     for item in top_items:
         code = item["code"]
-        if code not in quote_cache:
-            quote_cache[code] = load_xq_quote(ak, code)
-        if code not in profile_cache:
-            profile_cache[code] = load_xq_profile(ak, code)
-        quote = quote_cache[code]
-        profile = profile_cache[code]
+        market_row = market_index.get(code, {})
+        quote = quote_from_market_row(market_row)
+        industry = clean_text(first_present(market_row, K_INDUSTRY))
         result.append(
             stock_record(
                 code=code,
                 name=item["name"],
                 change_percent=item["changePercent"],
                 price=quote.get("price", ""),
-                industry=profile.get("industry", ""),
-                concept=profile.get("concept", ""),
+                industry=industry,
+                concept=industry,
                 amount=quote.get("amount", ""),
                 float_market_value=quote.get("floatMarketValue", ""),
                 turnover_rate=quote.get("turnoverRate", "") or item["turnoverRate"],
@@ -808,7 +861,11 @@ def market_stats_from_rows(rows: list[dict[str, Any]], first_limit_count: int) -
     up_count = 0
     down_count = 0
     flat_count = 0
+    total_turnover = 0.0
     for row in rows:
+        amount = parse_amount_value(first_present(row, K_AMOUNT))
+        if amount is not None:
+            total_turnover += amount
         change = to_float(first_present(row, K_CHANGE))
         if change is None:
             continue
@@ -823,6 +880,7 @@ def market_stats_from_rows(rows: list[dict[str, Any]], first_limit_count: int) -
         "downCount": down_count,
         "flatCount": flat_count,
         "firstLimitCount": first_limit_count,
+        "totalTurnover": format_amount(total_turnover),
     }
 
 
@@ -841,6 +899,7 @@ def main() -> None:
     trade_date_em, previous_trade_date_em = resolve_trade_dates(ak, args.date)
     market_rows = build_market_rows(ak)
     market_index = build_spot_index(market_rows)
+    board_index_rows = safe_call(ak.stock_zh_index_spot_sina)
 
     limit_up_rows = safe_call(ak.stock_zt_pool_em, date=trade_date_em)
     time.sleep(args.sleep)
@@ -875,9 +934,11 @@ def main() -> None:
     broken_limit_yesterday_feedback = map_previous_broken_limit(ak, previous_broken_rows, trade_date_em, market_index)
     limit_down_today = map_limit_down(limit_down_rows)
     previous_limit_up_feedback = map_consecutive_limit(map_previous_limit_up(previous_limit_up_rows))
+    previous_first_limit_feedback = map_previous_first_limit(previous_limit_up_rows)
 
     limit_up_today = enrich_rows_with_ths_reason(limit_up_today, ths_reason_map)
     first_limit_today = enrich_rows_with_ths_reason(first_limit_today, ths_reason_map)
+    previous_first_limit_feedback = enrich_rows_with_ths_reason(previous_first_limit_feedback, ths_reason_map)
 
     top_up_sectors = map_sector_rows(concept_rows, top=True)
     top_down_sectors = map_sector_rows(concept_rows, top=False)
@@ -899,16 +960,18 @@ def main() -> None:
         "tradeDate": f"{trade_date_em[:4]}-{trade_date_em[4:6]}-{trade_date_em[6:]}",
         "createdAt": datetime.now().astimezone().isoformat(),
         "marketStats": market_stats_from_rows(market_rows, len(first_limit_today)),
+        "boardIndexes": map_board_indexes(board_index_rows),
         "brokenLimitToday": broken_limit_today,
         "brokenLimitYesterdayFeedback": broken_limit_yesterday_feedback,
         "limitUpToday": limit_up_today,
         "limitUpYesterdayFeedback": previous_limit_up_feedback,
         "firstLimitToday": first_limit_today,
+        "firstLimitYesterdayFeedback": previous_first_limit_feedback,
         "limitDownToday": limit_down_today,
         "topUpSectors": top_up_sectors,
         "topDownSectors": top_down_sectors,
-        "top10DayGainGemStar": map_top_10_day(ten_day_rows, is_gem_star, ak, trade_date_em),
-        "top10DayGainMainBoard": map_top_10_day(ten_day_rows, is_main_board, ak, trade_date_em),
+        "top10DayGainGemStar": map_top_10_day(ten_day_rows, is_gem_star, market_index),
+        "top10DayGainMainBoard": map_top_10_day(ten_day_rows, is_main_board, market_index),
         "firstLimitSectorFocus": first_limit_focus(first_limit_today),
         "dataSource": "akshare+10jqka",
         "notes": "\u884c\u60c5\u6570\u636e\u6765\u81ea AKShare \u516c\u5f00 A \u80a1\u63a5\u53e3\uff1b\u6da8\u505c\u539f\u56e0\u4f18\u5148\u8865\u5145\u540c\u82b1\u987a\u201c\u6da8\u505c\u96f7\u8fbe\u201d\u516c\u5f00\u9875\u9762\uff1b\u5f53\u4e0a\u6e38\u677f\u5757\u699c\u5355\u4e0d\u53ef\u7528\u65f6\uff0c\u4f1a\u7528\u5df2\u91c7\u96c6\u7684\u4e2a\u80a1\u6570\u636e\u53cd\u63a8\u677f\u5757\u5f3a\u5f31\u3002",

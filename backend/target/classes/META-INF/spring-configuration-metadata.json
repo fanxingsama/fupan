@@ -1,12 +1,53 @@
 {
   "groups": [
     {
+      "name": "ai",
+      "type": "com.meirifupan.backend.config.AiProperties",
+      "sourceType": "com.meirifupan.backend.config.AiProperties"
+    },
+    {
       "name": "recap",
       "type": "com.meirifupan.backend.config.RecapProperties",
       "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    },
+    {
+      "name": "trade-journal",
+      "type": "com.meirifupan.backend.config.TradeJournalProperties",
+      "sourceType": "com.meirifupan.backend.config.TradeJournalProperties"
     }
   ],
   "properties": [
+    {
+      "name": "ai.api-key",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.AiProperties"
+    },
+    {
+      "name": "ai.base-url",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.AiProperties"
+    },
+    {
+      "name": "ai.enabled",
+      "type": "java.lang.Boolean",
+      "sourceType": "com.meirifupan.backend.config.AiProperties",
+      "defaultValue": false
+    },
+    {
+      "name": "ai.model",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.AiProperties"
+    },
+    {
+      "name": "ai.provider",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.AiProperties"
+    },
+    {
+      "name": "ai.summary-storage-root",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.AiProperties"
+    },
     {
       "name": "recap.collector-script",
       "type": "java.lang.String",
@@ -32,6 +73,11 @@
       "name": "recap.storage-root",
       "type": "java.lang.String",
       "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    },
+    {
+      "name": "trade-journal.storage-root",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.TradeJournalProperties"
     }
   ],
   "hints": []

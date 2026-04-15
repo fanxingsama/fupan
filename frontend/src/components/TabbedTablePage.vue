@@ -15,32 +15,38 @@
         <small>{{ tab.rows.length }}</small>
       </button>
     </div>
-    <DataTable
-      :title="activeSection.title"
-      :rows="activeSection.rows"
-      :columns="activeSection.columns"
-    />
+    <DataTable :title="activeSection.title" :rows="activeSection.rows" :columns="activeSection.columns" />
   </div>
 </template>
 
 <script>
 import DataTable from './DataTable.vue'
 import { toBoardHeight } from '../utils/format'
-import { BROKEN_ENHANCED_COLUMNS, STANDARD_COLUMNS, CONSECUTIVE_ENHANCED_COLUMNS, FIRST_LIMIT_ENHANCED_COLUMNS, LIMIT_REASON_COLUMNS } from '../utils/columns'
+import {
+  BROKEN_ENHANCED_COLUMNS,
+  STANDARD_COLUMNS,
+  CONSECUTIVE_ENHANCED_COLUMNS,
+  FIRST_LIMIT_ENHANCED_COLUMNS,
+  LIMIT_REASON_COLUMNS
+} from '../utils/columns'
 
 export default {
   name: 'TabbedTablePage',
   components: { DataTable },
   props: {
     recap: { type: Object, default: null },
-    pageType: { type: String, required: true } // 'broken' | 'consecutive' | 'firstLimit'
+    pageType: { type: String, required: true }
   },
   data() {
     return { currentTab: 'today' }
   },
   computed: {
     pageTitle() {
-      const map = { broken: '炸板票板块', consecutive: '连板票板块', firstLimit: '首板票板块' }
+      const map = {
+        broken: '炸板票池',
+        consecutive: '连板梯队',
+        firstLimit: '首板票池'
+      }
       return map[this.pageType] || ''
     },
     tabs() {
@@ -72,7 +78,7 @@ export default {
       return (this.recap.limitUpYesterdayFeedback || []).filter(item => toBoardHeight(item.boardHeight) >= 2)
     },
     activeSection() {
-      const tab = this.tabs.find(t => t.key === this.currentTab) || this.tabs[0]
+      const tab = this.tabs.find(item => item.key === this.currentTab) || this.tabs[0]
       if (!tab) return { title: '', rows: [], columns: [] }
 
       if (this.pageType === 'broken') {
@@ -100,7 +106,9 @@ export default {
     }
   },
   watch: {
-    pageType() { this.currentTab = 'today' }
+    pageType() {
+      this.currentTab = 'today'
+    }
   }
 }
 </script>
