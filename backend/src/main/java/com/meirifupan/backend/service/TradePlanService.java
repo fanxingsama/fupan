@@ -23,6 +23,9 @@ import java.util.Set;
  */
 @Service
 public class TradePlanService {
+    // AI-READABLE-RULE-ENGINE:
+    // This service converts recap + indicators into a next-day plan.
+    // Theme scores and watch-stock scores are fully rule-based at the moment.
 
     public TradePlan buildPlan(DailyRecapReport report, MarketIndicators indicators) {
         List<ThemeScore> themes = buildThemes(report);

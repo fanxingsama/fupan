@@ -1,7 +1,13 @@
 com\meirifupan\backend\config\RecapConfig.class
-com\meirifupan\backend\service\RecapCaptureService.class
+com\meirifupan\backend\controller\UserStockAnalysisController.class
 META-INF\spring-configuration-metadata.json
 com\meirifupan\backend\controller\RecapController.class
+com\meirifupan\backend\service\UserStockAnalysisService$UploadedDayImage.class
+com\meirifupan\backend\service\RecapCaptureService.class
+com\meirifupan\backend\service\UserStockAnalysisService.class
 com\meirifupan\backend\config\RecapProperties.class
+com\meirifupan\backend\model\UserStockAnalysisResponse.class
+com\meirifupan\backend\service\UserStockAnalysisService$ParsedFilename.class
 com\meirifupan\backend\service\RecapStorageService.class
+com\meirifupan\backend\model\UserStockAnalysisResponse$DayAnalysis.class
 com\meirifupan\backend\DailyRecapApplication.class

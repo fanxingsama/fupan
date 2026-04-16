@@ -24,7 +24,7 @@
       <div class="brand-block">
         <p class="eyebrow">A股短线复盘</p>
         <h1>每日复盘</h1>
-        <p class="muted">把情绪、主线、AI 整理和个人交易日志串起来，形成更完整的交易辅助系统。</p>
+        <p class="muted">把情绪、主线、AI整理和个人交易日志串起来，形成更完整的交易辅助系统。</p>
       </div>
 
       <div class="panel nav-panel">
@@ -37,6 +37,20 @@
             @click="switchView(nav.id)"
           >
             <span>{{ nav.label }}</span>
+          </button>
+          <button
+            class="view-button"
+            :class="{ active: activeView === 'stockAi' }"
+            @click="switchView('stockAi')"
+          >
+            <span>AI分析个股</span>
+          </button>
+          <button
+            class="view-button"
+            :class="{ active: activeView === 'userAi' }"
+            @click="switchView('userAi')"
+          >
+            <span>AI分析高手截图</span>
           </button>
         </div>
       </div>
@@ -54,9 +68,9 @@
       <p v-if="error" class="error">{{ error }}</p>
       <p v-if="loading" class="muted">正在加载复盘数据...</p>
       <p v-if="capturingDate" class="muted">正在采集 {{ capturingDate }} 的数据，请稍候...</p>
-      <p v-if="!recap && !loading && !error && activeView !== 'journal'" class="muted center-hint">暂无复盘数据</p>
+      <p v-if="!recap && !loading && !error && !['journal', 'userAi', 'stockAi'].includes(activeView)" class="muted center-hint">暂无复盘数据</p>
 
-      <section v-if="selectedDate && activeView !== 'journal'" class="capture-meta-panel">
+      <section v-if="selectedDate && !['journal', 'userAi', 'stockAi'].includes(activeView)" class="capture-meta-panel">
         <div class="capture-meta-item">
           <span>当前查看</span>
           <strong>{{ selectedDate }}</strong>
@@ -84,6 +98,8 @@
       <TabbedTablePage v-if="activeView === 'firstLimit' && recap" :recap="recap" page-type="firstLimit" />
       <HighRankPage v-if="activeView === 'highRank' && recap" :recap="recap" />
       <TradeJournalPage v-if="activeView === 'journal'" />
+      <StockAiAnalysisPage v-if="activeView === 'stockAi'" />
+      <UserStockAnalysisPage v-if="activeView === 'userAi'" />
     </main>
   </div>
 </template>
@@ -107,12 +123,24 @@ import OverviewPage from './components/OverviewPage.vue'
 import TabbedTablePage from './components/TabbedTablePage.vue'
 import HighRankPage from './components/HighRankPage.vue'
 import TradeJournalPage from './components/TradeJournalPage.vue'
+import UserStockAnalysisPage from './components/UserStockAnalysisPage.vue'
+import StockAiAnalysisPage from './components/StockAiAnalysisPage.vue'
 import OverwriteDialog from './components/OverwriteDialog.vue'
 import ToastBar from './components/ToastBar.vue'
 
 export default {
   name: 'App',
-  components: { RecapCalendar, OverviewPage, TabbedTablePage, HighRankPage, TradeJournalPage, OverwriteDialog, ToastBar },
+  components: {
+    RecapCalendar,
+    OverviewPage,
+    TabbedTablePage,
+    HighRankPage,
+    TradeJournalPage,
+    UserStockAnalysisPage,
+    StockAiAnalysisPage,
+    OverwriteDialog,
+    ToastBar
+  },
   data() {
     return {
       recaps: [],

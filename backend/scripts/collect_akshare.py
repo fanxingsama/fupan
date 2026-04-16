@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# AI-READABLE-SCRIPT:
+# Primary recap collector.
+# Builds DailyRecapReport from AKShare + fallback web sources and prints JSON to stdout.
+
 import argparse
 import contextlib
 import io

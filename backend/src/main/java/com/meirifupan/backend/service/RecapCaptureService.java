@@ -21,6 +21,9 @@ import java.util.List;
  */
 @Service
 public class RecapCaptureService {
+    // AI-READABLE-CHAIN:
+    // Java-to-Python bridge for recap collection.
+    // Provider selection happens here, actual upstream collection happens in the selected provider.
 
     private final RecapProperties properties;
     private final RecapStorageService storageService;

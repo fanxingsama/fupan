@@ -21,6 +21,9 @@ import java.util.List;
 
 @Service
 public class AiSummaryService {
+    // AI-READABLE-LLM-LAYER:
+    // Human-readable recap summary layer.
+    // Input is recap + indicators + trade plan, output is free-form summary text.
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
@@ -119,7 +122,7 @@ public class AiSummaryService {
                         )
                 );
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(properties.baseUrl()))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(AiEndpointResolver.resolveChatCompletionsUrl(properties.baseUrl())))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + properties.apiKey())
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
@@ -127,7 +130,7 @@ public class AiSummaryService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode());
+            throw new IllegalStateException("HTTP " + response.statusCode() + " " + response.body());
         }
 
         JsonNode root = objectMapper.readTree(response.body());

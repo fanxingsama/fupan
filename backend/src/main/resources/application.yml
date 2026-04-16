@@ -7,6 +7,10 @@ spring:
   datasource:
     url: jdbc:sqlite:recap.db
     driver-class-name: org.sqlite.JDBC
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 200MB
   sql:
     init:
       mode: always
@@ -16,13 +20,14 @@ recap:
   provider: akshare
   python-executable: .venv/Scripts/python.exe
   collector-script: scripts/collect_akshare.py
+  intelligence-script: scripts/collect_market_intelligence.py
   sleep-seconds: 1.2
 
 ai:
-  enabled: false
+  enabled: ${AI_ENABLED:false}
   provider: minimax
   api-key: ${AI_API_KEY:}
-  base-url: ${AI_BASE_URL:https://api.minimaxi.com/v1/text/chatcompletion_v2}
+  base-url: ${AI_BASE_URL:https://api.minimaxi.com/v1}
   model: ${AI_MODEL:MiniMax-Text-01}
   summary-storage-root: ai-summaries
 

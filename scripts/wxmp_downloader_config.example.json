@@ -1,0 +1,27 @@
+{
+  "task_name": "wanzhu_user_1",
+  "output_dir": "downloads",
+  "api": {
+    "url": "https://example.com/miniapp/api/post/list",
+    "method": "POST",
+    "headers": {
+      "User-Agent": "Mozilla/5.0",
+      "Authorization": "Bearer REPLACE_ME",
+      "X-Token": "REPLACE_ME"
+    },
+    "params": {},
+    "json_body": {
+      "userId": "REPLACE_ME",
+      "pageSize": 20
+    },
+    "paging": {
+      "page_field": "page",
+      "page_start": 1,
+      "max_pages": 50
+    },
+    "delay_ms": 500
+  },
+  "download_headers": {
+    "User-Agent": "Mozilla/5.0"
+  }
+}

@@ -124,6 +124,10 @@
       </div>
     </section>
 
+    <AiBriefingPanel :trade-date="recap.tradeDate" />
+
+    <AiInsightPanel :trade-date="recap.tradeDate" />
+
     <AiSummaryPanel :trade-date="recap.tradeDate" />
 
     <section v-if="watchStocks.length" class="panel">
@@ -296,6 +300,8 @@
 <script>
 import { cellClass, displayValue, percentClass } from '../utils/format'
 import { FOCUS_DETAIL_COLUMNS } from '../utils/columns'
+import AiBriefingPanel from './AiBriefingPanel.vue'
+import AiInsightPanel from './AiInsightPanel.vue'
 import AiSummaryPanel from './AiSummaryPanel.vue'
 import {
   buildTrendOption,
@@ -308,7 +314,7 @@ import {
 
 export default {
   name: 'OverviewPage',
-  components: { AiSummaryPanel },
+  components: { AiBriefingPanel, AiInsightPanel, AiSummaryPanel },
   props: {
     recap: { type: Object, default: null },
     indicators: { type: Object, default: null },

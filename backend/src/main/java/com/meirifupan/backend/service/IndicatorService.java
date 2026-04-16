@@ -18,6 +18,9 @@ import java.util.TreeMap;
  */
 @Service
 public class IndicatorService {
+    // AI-READABLE-RULE-ENGINE:
+    // This class is rule-based, not model-based.
+    // Emotion phase, market scores, and risk signals are computed from recap statistics.
 
     public int maxBoardHeight(DailyRecapReport report) {
         int max = 0;

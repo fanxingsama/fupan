@@ -54,6 +54,11 @@
       "sourceType": "com.meirifupan.backend.config.RecapProperties"
     },
     {
+      "name": "recap.intelligence-script",
+      "type": "java.lang.String",
+      "sourceType": "com.meirifupan.backend.config.RecapProperties"
+    },
+    {
       "name": "recap.provider",
       "type": "java.lang.String",
       "sourceType": "com.meirifupan.backend.config.RecapProperties"

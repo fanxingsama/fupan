@@ -24,3 +24,18 @@ CREATE TABLE IF NOT EXISTS ai_summary (
     trade_date TEXT PRIMARY KEY,
     summary_json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ai_insight (
+    trade_date TEXT PRIMARY KEY,
+    insight_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_briefing (
+    trade_date TEXT PRIMARY KEY,
+    briefing_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS market_intelligence (
+    trade_date TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL
+);
