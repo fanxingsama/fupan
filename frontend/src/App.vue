@@ -52,6 +52,13 @@
           >
             <span>AI分析高手截图</span>
           </button>
+          <button
+            class="view-button"
+            :class="{ active: activeView === 'aiChat' }"
+            @click="switchView('aiChat')"
+          >
+            <span>AI问答</span>
+          </button>
         </div>
       </div>
 
@@ -68,9 +75,9 @@
       <p v-if="error" class="error">{{ error }}</p>
       <p v-if="loading" class="muted">正在加载复盘数据...</p>
       <p v-if="capturingDate" class="muted">正在采集 {{ capturingDate }} 的数据，请稍候...</p>
-      <p v-if="!recap && !loading && !error && !['journal', 'userAi', 'stockAi'].includes(activeView)" class="muted center-hint">暂无复盘数据</p>
+      <p v-if="!recap && !loading && !error && !['journal', 'userAi', 'stockAi', 'aiChat'].includes(activeView)" class="muted center-hint">暂无复盘数据</p>
 
-      <section v-if="selectedDate && !['journal', 'userAi', 'stockAi'].includes(activeView)" class="capture-meta-panel">
+      <section v-if="selectedDate && !['journal', 'userAi', 'stockAi', 'aiChat'].includes(activeView)" class="capture-meta-panel">
         <div class="capture-meta-item">
           <span>当前查看</span>
           <strong>{{ selectedDate }}</strong>
@@ -100,6 +107,7 @@
       <TradeJournalPage v-if="activeView === 'journal'" />
       <StockAiAnalysisPage v-if="activeView === 'stockAi'" />
       <UserStockAnalysisPage v-if="activeView === 'userAi'" />
+      <AiChatPage v-if="activeView === 'aiChat'" />
     </main>
   </div>
 </template>
@@ -125,6 +133,7 @@ import HighRankPage from './components/HighRankPage.vue'
 import TradeJournalPage from './components/TradeJournalPage.vue'
 import UserStockAnalysisPage from './components/UserStockAnalysisPage.vue'
 import StockAiAnalysisPage from './components/StockAiAnalysisPage.vue'
+import AiChatPage from './components/AiChatPage.vue'
 import OverwriteDialog from './components/OverwriteDialog.vue'
 import ToastBar from './components/ToastBar.vue'
 
@@ -138,6 +147,7 @@ export default {
     TradeJournalPage,
     UserStockAnalysisPage,
     StockAiAnalysisPage,
+    AiChatPage,
     OverwriteDialog,
     ToastBar
   },

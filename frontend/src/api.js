@@ -2,6 +2,7 @@ const RECAP_BASE = '/api/recaps'
 const TRADE_JOURNAL_BASE = '/api/trade-journal'
 const USER_STOCK_ANALYSIS_BASE = '/api/user-stock-analysis'
 const STOCK_AI_ANALYSIS_BASE = '/api/stock-ai-analysis'
+const AI_CHAT_BASE = '/api/ai-chat'
 
 async function request(url, options = {}) {
   const headers = options.body instanceof FormData
@@ -78,5 +79,12 @@ export function analyzeStockWithAi(stockCode, timeframe) {
   return request(STOCK_AI_ANALYSIS_BASE, {
     method: 'POST',
     body: JSON.stringify({ stockCode, timeframe })
+  })
+}
+
+export function askAiChat(history, message) {
+  return request(AI_CHAT_BASE, {
+    method: 'POST',
+    body: JSON.stringify({ history, message })
   })
 }
