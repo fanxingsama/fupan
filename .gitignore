@@ -1,4 +1,5 @@
 backend/.venv/
+backend/target/
 backend/scripts/__pycache__/
 frontend/node_modules/
 tools/
