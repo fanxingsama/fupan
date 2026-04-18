@@ -9,10 +9,6 @@ import com.meirifupan.backend.model.StockAiAnalysisResponse;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,17 +20,24 @@ import java.util.List;
 public class StockAiAnalysisService {
 
     private static final String DISCLAIMER = "仅用于量价关系与裸K学习，不构成投资建议。分钟级数据更适合训练节奏感，不适合机械跟单。";
+    private static final String CACHE_SCENARIO = "stock-ai-analysis:v1";
 
     private final RecapProperties recapProperties;
     private final AiProperties aiProperties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final AiGatewayClient aiGatewayClient;
+    private final AiRequestCacheService aiRequestCacheService;
 
-    public StockAiAnalysisService(RecapProperties recapProperties, AiProperties aiProperties, ObjectMapper objectMapper) {
+    public StockAiAnalysisService(RecapProperties recapProperties,
+                                  AiProperties aiProperties,
+                                  ObjectMapper objectMapper,
+                                  AiGatewayClient aiGatewayClient,
+                                  AiRequestCacheService aiRequestCacheService) {
         this.recapProperties = recapProperties;
         this.aiProperties = aiProperties;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
+        this.aiGatewayClient = aiGatewayClient;
+        this.aiRequestCacheService = aiRequestCacheService;
     }
 
     public StockAiAnalysisResponse analyze(StockAiAnalysisRequest request) {
@@ -44,8 +47,15 @@ public class StockAiAnalysisService {
         }
 
         try {
+            String cacheKey = aiRequestCacheService.buildCacheKey(CACHE_SCENARIO, stockData.toString());
+            var cached = aiRequestCacheService.load(cacheKey, StockAiAnalysisResponse.class);
+            if (cached.isPresent()) {
+                return cached.get();
+            }
             JsonNode aiRoot = requestAiAnalysis(stockData);
-            return mergeAiResponse(stockData, aiRoot, "ready");
+            StockAiAnalysisResponse response = mergeAiResponse(stockData, aiRoot, "ready");
+            aiRequestCacheService.save(cacheKey, CACHE_SCENARIO, response);
+            return response;
         } catch (Exception ex) {
             return buildFallbackResponse(stockData, "error");
         }
@@ -124,29 +134,15 @@ public class StockAiAnalysisService {
                 以下是数据：
                 """ + stockData.toPrettyString();
 
-        JsonNode requestBody = objectMapper.createObjectNode()
-                .put("model", aiProperties.model())
-                .set("messages", objectMapper.createArrayNode()
+        JsonNode requestBody = aiGatewayClient.newChatRequest(objectMapper.createArrayNode()
                         .add(objectMapper.createObjectNode()
                                 .put("role", "system")
                                 .put("content", "你是严格遵守JSON输出要求的A股量价分析助手。"))
                         .add(objectMapper.createObjectNode()
                                 .put("role", "user")
                                 .put("content", prompt)));
-
-        HttpRequest request = HttpRequest.newBuilder(URI.create(AiEndpointResolver.resolveChatCompletionsUrl(aiProperties.baseUrl())))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + aiProperties.apiKey())
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode() + " " + response.body());
-        }
-
-        String content = extractContent(objectMapper.readTree(response.body()));
-        return objectMapper.readTree(extractJson(content));
+        String content = aiGatewayClient.chatCompletion(requestBody);
+        return objectMapper.readTree(AiJsonSupport.extractJsonObject(content));
     }
 
     private StockAiAnalysisResponse buildFallbackResponse(JsonNode stockData, String status) {
@@ -155,7 +151,7 @@ public class StockAiAnalysisService {
         double volumeRatio = metrics.path("recentVolumeRatio").asDouble(1.0);
         String trendBias = change > 3 ? "偏多" : change > 0.8 ? "震荡偏多" : change < -3 ? "偏空" : change < -0.8 ? "震荡偏空" : "震荡";
         String actionBias = volumeRatio > 1.25 && change > 0 ? "突破后跟随" : change > 0 ? "逢回踩观察" : change < 0 ? "等待确认" : "谨慎回避";
-        String headline = "%s %s量价学习观察".formatted(text(stockData, "stockName"), text(stockData, "timeframeLabel"));
+        String headline = "%s %s量价学习观察".formatted(AiJsonSupport.text(stockData, "stockName"), AiJsonSupport.text(stockData, "timeframeLabel"));
         String summary = "当前窗口涨跌幅约 %.2f%%，最近量能比约 %.2f。更适合把它当成量价教学样本，先观察价格是否延续、回踩是否缩量，再决定是否跟随。"
                 .formatted(change, volumeRatio);
         return buildResponse(
@@ -165,7 +161,7 @@ public class StockAiAnalysisService {
                 trendBias,
                 actionBias,
                 status.equals("disabled") ? "低" : "中",
-                defaultIfEmpty(readStringList(stockData.path("signals"), 8), List.of("当前数据可用于基础量价观察。")),
+                defaultIfEmpty(AiJsonSupport.readStringList(stockData.path("signals"), 8), List.of("当前数据可用于基础量价观察。")),
                 List.of(
                         "等待价格重新站回最近一段时间的短线高点，同时成交量温和放大。",
                         "上涨后回踩如果量能收缩、低点不破，可作为观察承接是否有效的学习点。"
@@ -189,16 +185,16 @@ public class StockAiAnalysisService {
     private StockAiAnalysisResponse mergeAiResponse(JsonNode stockData, JsonNode aiRoot, String status) {
         return buildResponse(
                 stockData,
-                firstNonBlank(text(aiRoot, "headline"), text(stockData, "stockName") + " " + text(stockData, "timeframeLabel") + " 量价分析"),
-                firstNonBlank(text(aiRoot, "summary"), "AI 未返回总结。"),
-                firstNonBlank(text(aiRoot, "trendBias"), "震荡"),
-                firstNonBlank(text(aiRoot, "actionBias"), "等待确认"),
-                firstNonBlank(text(aiRoot, "confidence"), "中"),
-                readStringList(aiRoot.path("volumePriceSignals"), 8),
-                readStringList(aiRoot.path("buyPoints"), 8),
-                readStringList(aiRoot.path("sellPoints"), 8),
-                readStringList(aiRoot.path("learningPoints"), 8),
-                readStringList(aiRoot.path("riskWarnings"), 8),
+                AiJsonSupport.firstNonBlank(AiJsonSupport.text(aiRoot, "headline"), AiJsonSupport.text(stockData, "stockName") + " " + AiJsonSupport.text(stockData, "timeframeLabel") + " 量价分析"),
+                AiJsonSupport.firstNonBlank(AiJsonSupport.text(aiRoot, "summary"), "AI 未返回总结。"),
+                AiJsonSupport.firstNonBlank(AiJsonSupport.text(aiRoot, "trendBias"), "震荡"),
+                AiJsonSupport.firstNonBlank(AiJsonSupport.text(aiRoot, "actionBias"), "等待确认"),
+                AiJsonSupport.firstNonBlank(AiJsonSupport.text(aiRoot, "confidence"), "中"),
+                AiJsonSupport.readStringList(aiRoot.path("volumePriceSignals"), 8),
+                AiJsonSupport.readStringList(aiRoot.path("buyPoints"), 8),
+                AiJsonSupport.readStringList(aiRoot.path("sellPoints"), 8),
+                AiJsonSupport.readStringList(aiRoot.path("learningPoints"), 8),
+                AiJsonSupport.readStringList(aiRoot.path("riskWarnings"), 8),
                 status
         );
     }
@@ -223,14 +219,14 @@ public class StockAiAnalysisService {
                 aiProperties.provider(),
                 aiProperties.model(),
                 status,
-                text(stockData, "stockCode"),
-                text(stockData, "stockName"),
-                text(stockData, "timeframe"),
-                text(stockData, "timeframeLabel"),
-                text(stockData, "source"),
+                AiJsonSupport.text(stockData, "stockCode"),
+                AiJsonSupport.text(stockData, "stockName"),
+                AiJsonSupport.text(stockData, "timeframe"),
+                AiJsonSupport.text(stockData, "timeframeLabel"),
+                AiJsonSupport.text(stockData, "source"),
                 stockData.path("analyzedBars").asInt(),
-                text(metrics, "windowStart"),
-                text(metrics, "windowEnd"),
+                AiJsonSupport.text(metrics, "windowStart"),
+                AiJsonSupport.text(metrics, "windowEnd"),
                 nullableDouble(metrics.path("latestPrice")),
                 nullableDouble(metrics.path("periodChangePercent")),
                 nullableDouble(metrics.path("rangeHigh")),
@@ -242,7 +238,7 @@ public class StockAiAnalysisService {
                 trendBias,
                 actionBias,
                 confidence,
-                defaultIfEmpty(volumePriceSignals, readStringList(stockData.path("signals"), 8)),
+                defaultIfEmpty(volumePriceSignals, AiJsonSupport.readStringList(stockData.path("signals"), 8)),
                 defaultIfEmpty(buyPoints, List.of("等待价格与成交量共同确认，不做单根K线的主观猜顶抄底。")),
                 defaultIfEmpty(sellPoints, List.of("一旦出现放量冲高回落或放量破位，优先从保护利润与回撤控制角度审视。")),
                 defaultIfEmpty(learningPoints, List.of("把每一段走势拆成启动、确认、加速、分歧四个阶段去看。")),
@@ -262,7 +258,7 @@ public class StockAiAnalysisService {
         for (int i = start; i < node.size(); i++) {
             JsonNode item = node.get(i);
             result.add(new StockAiAnalysisResponse.CandleBar(
-                    text(item, "time"),
+                    AiJsonSupport.text(item, "time"),
                     item.path("open").asDouble(),
                     item.path("close").asDouble(),
                     item.path("high").asDouble(),
@@ -276,85 +272,16 @@ public class StockAiAnalysisService {
         return result;
     }
 
-    private String extractContent(JsonNode root) {
-        if (root.path("choices").isArray() && !root.path("choices").isEmpty()) {
-            JsonNode choice = root.path("choices").get(0);
-            JsonNode content = choice.path("message").path("content");
-            if (content.isTextual() && !content.asText().isBlank()) {
-                return content.asText();
-            }
-            if (content.isArray()) {
-                StringBuilder builder = new StringBuilder();
-                for (JsonNode item : content) {
-                    if (item.has("text")) {
-                        builder.append(item.path("text").asText()).append("\n");
-                    }
-                }
-                if (!builder.toString().isBlank()) {
-                    return builder.toString();
-                }
-            }
-        }
-        throw new IllegalStateException("无法从 AI 响应中提取文本");
-    }
-
-    private String extractJson(String content) {
-        String text = content == null ? "" : content.trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```(?:json)?\\s*", "");
-            text = text.replaceFirst("\\s*```$", "");
-        }
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            throw new IllegalStateException("AI 未返回有效 JSON");
-        }
-        return text.substring(start, end + 1);
-    }
-
     private boolean aiEnabled() {
-        return aiProperties.enabled() && !isBlank(aiProperties.apiKey()) && !isBlank(aiProperties.baseUrl());
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private String text(JsonNode node, String field) {
-        return node.path(field).asText("").trim();
+        return aiGatewayClient.isConfigured();
     }
 
     private Double nullableDouble(JsonNode node) {
         return node.isNumber() ? node.asDouble() : null;
     }
 
-    private List<String> readStringList(JsonNode node, int maxSize) {
-        List<String> result = new ArrayList<>();
-        if (!node.isArray()) {
-            return result;
-        }
-        for (JsonNode item : node) {
-            String value = item.asText("").trim();
-            if (!value.isBlank()) {
-                result.add(value);
-            }
-            if (result.size() >= maxSize) {
-                break;
-            }
-        }
-        return result;
-    }
-
     private List<String> defaultIfEmpty(List<String> preferred, List<String> fallback) {
         return preferred == null || preferred.isEmpty() ? fallback : preferred;
     }
 
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return "";
-    }
 }

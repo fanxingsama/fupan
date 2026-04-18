@@ -11,10 +11,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,18 +26,18 @@ public class AiInsightService {
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final AiGatewayClient aiGatewayClient;
     private final JdbcTemplate jdbc;
 
-    public AiInsightService(AiProperties properties, ObjectMapper objectMapper, JdbcTemplate jdbc) {
+    public AiInsightService(AiProperties properties, ObjectMapper objectMapper, JdbcTemplate jdbc, AiGatewayClient aiGatewayClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
         this.jdbc = jdbc;
+        this.aiGatewayClient = aiGatewayClient;
     }
 
     public AiInsight generateOrLoad(DailyRecapReport report, MarketIndicators indicators, TradePlan tradePlan, boolean refresh) {
-        if (!properties.enabled() || isBlank(properties.apiKey()) || isBlank(properties.baseUrl())) {
+        if (!aiGatewayClient.isConfigured()) {
             return new AiInsight(
                     false,
                     false,
@@ -134,9 +130,7 @@ public class AiInsightService {
             throws IOException, InterruptedException {
         String prompt = buildPrompt(report, indicators, tradePlan);
 
-        JsonNode requestBody = objectMapper.createObjectNode()
-                .put("model", properties.model())
-                .set("messages", objectMapper.createArrayNode()
+        JsonNode requestBody = aiGatewayClient.newChatRequest(objectMapper.createArrayNode()
                         .add(objectMapper.createObjectNode()
                                 .put("role", "system")
                                 .put("content", """
@@ -147,19 +141,7 @@ public class AiInsightService {
                         .add(objectMapper.createObjectNode()
                                 .put("role", "user")
                                 .put("content", prompt)));
-
-        HttpRequest request = HttpRequest.newBuilder(URI.create(AiEndpointResolver.resolveChatCompletionsUrl(properties.baseUrl())))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + properties.apiKey())
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode() + " " + response.body());
-        }
-
-        String content = extractContent(objectMapper.readTree(response.body()));
+        String content = aiGatewayClient.chatCompletion(requestBody);
         return parseInsight(content, report, tradePlan);
     }
 
@@ -204,16 +186,16 @@ public class AiInsightService {
     }
 
     private AiInsight parseInsight(String content, DailyRecapReport report, TradePlan tradePlan) throws IOException {
-        JsonNode root = objectMapper.readTree(extractJson(content));
+        JsonNode root = objectMapper.readTree(AiJsonSupport.extractJsonObject(content));
 
         List<AiInsight.ThemeInsight> themes = new ArrayList<>();
         if (root.path("themes").isArray()) {
             for (JsonNode item : root.path("themes")) {
                 themes.add(new AiInsight.ThemeInsight(
-                        text(item, "name"),
-                        text(item, "strength"),
-                        text(item, "driver"),
-                        text(item, "observation")
+                        AiJsonSupport.text(item, "name"),
+                        AiJsonSupport.text(item, "strength"),
+                        AiJsonSupport.text(item, "driver"),
+                        AiJsonSupport.text(item, "observation")
                 ));
             }
         }
@@ -222,12 +204,12 @@ public class AiInsightService {
         if (root.path("leaders").isArray()) {
             for (JsonNode item : root.path("leaders")) {
                 leaders.add(new AiInsight.LeaderInsight(
-                        text(item, "code"),
-                        text(item, "name"),
-                        text(item, "role"),
-                        text(item, "reason"),
-                        text(item, "signal"),
-                        text(item, "risk")
+                        AiJsonSupport.text(item, "code"),
+                        AiJsonSupport.text(item, "name"),
+                        AiJsonSupport.text(item, "role"),
+                        AiJsonSupport.text(item, "reason"),
+                        AiJsonSupport.text(item, "signal"),
+                        AiJsonSupport.text(item, "risk")
                 ));
             }
         }
@@ -262,8 +244,8 @@ public class AiInsightService {
                 properties.provider(),
                 properties.model(),
                 "ready",
-                firstNonBlank(text(root, "marketConclusion"), report.notes(), tradePlan.headline()),
-                firstNonBlank(text(root, "marketStyle"), tradePlan.tradeMode()),
+                firstNonBlank(AiJsonSupport.text(root, "marketConclusion"), report.notes(), tradePlan.headline()),
+                firstNonBlank(AiJsonSupport.text(root, "marketStyle"), tradePlan.tradeMode()),
                 limitStrings(strings(root.path("keySignals")), 5),
                 limitThemes(themes, 3),
                 limitLeaders(leaders, 5),
@@ -272,41 +254,6 @@ public class AiInsightService {
                 DEFAULT_DISCLAIMER,
                 OffsetDateTime.now()
         );
-    }
-
-    private String extractContent(JsonNode root) {
-        if (root.path("choices").isArray() && !root.path("choices").isEmpty()) {
-            JsonNode choice = root.path("choices").get(0);
-            JsonNode content = choice.path("message").path("content");
-            if (!content.isMissingNode() && !content.asText().isBlank()) {
-                return content.asText();
-            }
-            JsonNode text = choice.path("text");
-            if (!text.isMissingNode() && !text.asText().isBlank()) {
-                return text.asText();
-            }
-        }
-        if (!root.path("reply").asText().isBlank()) {
-            return root.path("reply").asText();
-        }
-        if (!root.path("output_text").asText().isBlank()) {
-            return root.path("output_text").asText();
-        }
-        throw new IllegalStateException("无法从响应中提取 AI 文本");
-    }
-
-    private String extractJson(String content) {
-        String text = content == null ? "" : content.trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```(?:json)?\\s*", "");
-            text = text.replaceFirst("\\s*```$", "");
-        }
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            throw new IllegalStateException("AI 未返回有效 JSON");
-        }
-        return text.substring(start, end + 1);
     }
 
     private List<String> strings(JsonNode node) {
@@ -343,10 +290,6 @@ public class AiInsightService {
                 .filter(item -> !isBlank(item.name()))
                 .limit(maxSize)
                 .toList();
-    }
-
-    private String text(JsonNode node, String field) {
-        return node.path(field).asText("").trim();
     }
 
     private String firstNonBlank(String... values) {

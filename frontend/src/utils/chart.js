@@ -1,6 +1,25 @@
 // ECharts option 构建器
-import * as echarts from 'echarts'
 import { parseNumericValue } from './format'
+
+let echartsLoader = null
+
+function linearGradient(stops) {
+  return {
+    type: 'linear',
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
+    colorStops: stops
+  }
+}
+
+async function loadEcharts() {
+  if (!echartsLoader) {
+    echartsLoader = import('echarts')
+  }
+  return echartsLoader
+}
 
 export function buildTrendOption(values, dates, color) {
   return {
@@ -22,7 +41,7 @@ export function buildTrendOption(values, dates, color) {
       lineStyle: { width: 4, color },
       itemStyle: { color, borderColor: '#fff', borderWidth: 2 },
       areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        color: linearGradient([
           { offset: 0, color: `${color}66` }, { offset: 1, color: `${color}08` }
         ])
       }
@@ -47,7 +66,7 @@ export function buildDualTrendOption(values1, values2, dates, color1, color2, na
       { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: '#64748b' } }
     ],
     series: [
-      { name: name1, data: values1, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, yAxisIndex: 0, lineStyle: { width: 3, color: color1 }, itemStyle: { color: color1, borderColor: '#fff', borderWidth: 2 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `${color1}44` }, { offset: 1, color: `${color1}08` }]) } },
+      { name: name1, data: values1, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, yAxisIndex: 0, lineStyle: { width: 3, color: color1 }, itemStyle: { color: color1, borderColor: '#fff', borderWidth: 2 }, areaStyle: { color: linearGradient([{ offset: 0, color: `${color1}44` }, { offset: 1, color: `${color1}08` }]) } },
       { name: name2, data: values2, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, yAxisIndex: 1, lineStyle: { width: 3, color: color2 }, itemStyle: { color: color2, borderColor: '#fff', borderWidth: 2 } }
     ]
   }
@@ -75,10 +94,17 @@ export function buildLadderOption(ladderData) {
         value: v,
         itemStyle: {
           borderRadius: 999,
-          color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
-            { offset: 0, color: ladderData[idx].height >= 4 ? '#ef4444' : ladderData[idx].height >= 2 ? '#f97316' : '#22c55e' },
-            { offset: 1, color: ladderData[idx].height >= 4 ? '#fca5a5' : ladderData[idx].height >= 2 ? '#fed7aa' : '#bbf7d0' }
-          ])
+          color: {
+            type: 'linear',
+            x: 1,
+            y: 0,
+            x2: 0,
+            y2: 0,
+            colorStops: [
+              { offset: 0, color: ladderData[idx].height >= 4 ? '#ef4444' : ladderData[idx].height >= 2 ? '#f97316' : '#22c55e' },
+              { offset: 1, color: ladderData[idx].height >= 4 ? '#fca5a5' : ladderData[idx].height >= 2 ? '#fed7aa' : '#bbf7d0' }
+            ]
+          }
         }
       })),
       barWidth: 16,
@@ -112,9 +138,16 @@ export function buildBarOption(rows, color, reverse = false) {
       showBackground: true, backgroundStyle: { color: 'rgba(20,33,61,0.05)' },
       itemStyle: {
         borderRadius: 999,
-        color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
-          { offset: 0, color: reverse ? '#0f766e' : '#f97316' }, { offset: 1, color }
-        ])
+        color: {
+          type: 'linear',
+          x: 1,
+          y: 0,
+          x2: 0,
+          y2: 0,
+          colorStops: [
+            { offset: 0, color: reverse ? '#0f766e' : '#f97316' }, { offset: 1, color }
+          ]
+        }
       },
       label: {
         show: true, position: 'right', distance: 8, color: '#14213d',
@@ -140,9 +173,16 @@ export function buildFocusOption(dataMap) {
       type: 'bar', data: rows.map(i => i.value), barWidth: 14,
       itemStyle: {
         borderRadius: 999,
-        color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
-          { offset: 0, color: '#84cc16' }, { offset: 1, color: '#22c55e' }
-        ])
+        color: {
+          type: 'linear',
+          x: 1,
+          y: 0,
+          x2: 0,
+          y2: 0,
+          colorStops: [
+            { offset: 0, color: '#84cc16' }, { offset: 1, color: '#22c55e' }
+          ]
+        }
       },
       label: { show: true, position: 'right', color: '#14213d' }
     }]
@@ -150,8 +190,9 @@ export function buildFocusOption(dataMap) {
 }
 
 // 初始化或复用 ECharts 实例，处理 DOM 元素可能已更换的情况
-export function ensureChart(chartMap, key, el) {
+export async function ensureChart(chartMap, key, el) {
   if (!el) return null
+  const echarts = await loadEcharts()
   const existing = chartMap[key]
   if (existing) {
     try {

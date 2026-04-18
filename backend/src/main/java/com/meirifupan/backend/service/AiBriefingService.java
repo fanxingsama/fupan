@@ -13,10 +13,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,19 +30,20 @@ public class AiBriefingService {
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final AiGatewayClient aiGatewayClient;
     private final JdbcTemplate jdbc;
     private final MarketIntelligenceService marketIntelligenceService;
 
     public AiBriefingService(AiProperties properties,
                              ObjectMapper objectMapper,
                              JdbcTemplate jdbc,
-                             MarketIntelligenceService marketIntelligenceService) {
+                             MarketIntelligenceService marketIntelligenceService,
+                             AiGatewayClient aiGatewayClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
         this.jdbc = jdbc;
         this.marketIntelligenceService = marketIntelligenceService;
+        this.aiGatewayClient = aiGatewayClient;
     }
 
     public AiBriefing generateOrLoad(DailyRecapReport report,
@@ -54,7 +51,7 @@ public class AiBriefingService {
                                      MarketIndicators indicators,
                                      TradePlan tradePlan,
                                      boolean refresh) {
-        if (!properties.enabled() || isBlank(properties.apiKey()) || isBlank(properties.baseUrl())) {
+        if (!aiGatewayClient.isConfigured()) {
             return new AiBriefing(
                     false,
                     false,
@@ -148,9 +145,7 @@ public class AiBriefingService {
                                        MarketIntelligence intelligence) throws IOException, InterruptedException {
         String prompt = buildPrompt(report, recentReports, indicators, tradePlan, intelligence);
 
-        JsonNode requestBody = objectMapper.createObjectNode()
-                .put("model", properties.model())
-                .set("messages", objectMapper.createArrayNode()
+        JsonNode requestBody = aiGatewayClient.newChatRequest(objectMapper.createArrayNode()
                         .add(objectMapper.createObjectNode()
                                 .put("role", "system")
                                 .put("content", """
@@ -161,19 +156,7 @@ public class AiBriefingService {
                         .add(objectMapper.createObjectNode()
                                 .put("role", "user")
                                 .put("content", prompt)));
-
-        HttpRequest request = HttpRequest.newBuilder(URI.create(AiEndpointResolver.resolveChatCompletionsUrl(properties.baseUrl())))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + properties.apiKey())
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode() + " " + response.body());
-        }
-
-        String content = extractContent(objectMapper.readTree(response.body()));
+        String content = aiGatewayClient.chatCompletion(requestBody);
         return parseBriefing(content, report, recentReports, tradePlan, intelligence);
     }
 
@@ -257,16 +240,16 @@ public class AiBriefingService {
                                      List<DailyRecapReport> recentReports,
                                      TradePlan tradePlan,
                                      MarketIntelligence intelligence) throws IOException {
-        JsonNode root = objectMapper.readTree(extractJson(content));
+        JsonNode root = objectMapper.readTree(AiJsonSupport.extractJsonObject(content));
 
         List<AiBriefing.ThemePulse> themePulses = new ArrayList<>();
         if (root.path("themePulses").isArray()) {
             for (JsonNode item : root.path("themePulses")) {
                 themePulses.add(new AiBriefing.ThemePulse(
-                        text(item, "name"),
-                        text(item, "trend"),
-                        text(item, "reason"),
-                        text(item, "nextSignal")
+                        AiJsonSupport.text(item, "name"),
+                        AiJsonSupport.text(item, "trend"),
+                        AiJsonSupport.text(item, "reason"),
+                        AiJsonSupport.text(item, "nextSignal")
                 ));
             }
         }
@@ -275,11 +258,11 @@ public class AiBriefingService {
         if (root.path("stockFocuses").isArray()) {
             for (JsonNode item : root.path("stockFocuses")) {
                 stockFocuses.add(new AiBriefing.StockFocus(
-                        text(item, "code"),
-                        text(item, "name"),
-                        text(item, "tag"),
-                        text(item, "reason"),
-                        text(item, "catalyst")
+                        AiJsonSupport.text(item, "code"),
+                        AiJsonSupport.text(item, "name"),
+                        AiJsonSupport.text(item, "tag"),
+                        AiJsonSupport.text(item, "reason"),
+                        AiJsonSupport.text(item, "catalyst")
                 ));
             }
         }
@@ -288,8 +271,8 @@ public class AiBriefingService {
         if (root.path("timeline").isArray()) {
             for (JsonNode item : root.path("timeline")) {
                 timeline.add(new AiBriefing.BriefingNote(
-                        text(item, "tradeDate"),
-                        text(item, "summary")
+                        AiJsonSupport.text(item, "tradeDate"),
+                        AiJsonSupport.text(item, "summary")
                 ));
             }
         }
@@ -338,8 +321,8 @@ public class AiBriefingService {
                 properties.provider(),
                 properties.model(),
                 "ready",
-                firstNonBlank(text(root, "headline"), tradePlan.headline()),
-                firstNonBlank(text(root, "briefing"), "基于实时热榜、热词和当日盘面生成的情报简报。"),
+                firstNonBlank(AiJsonSupport.text(root, "headline"), tradePlan.headline()),
+                firstNonBlank(AiJsonSupport.text(root, "briefing"), "基于实时热榜、热词和当日盘面生成的情报简报。"),
                 safeList(themePulses).stream().filter(item -> !isBlank(item.name())).limit(4).toList(),
                 safeList(stockFocuses).stream().filter(item -> !isBlank(item.name())).limit(5).toList(),
                 safeList(timeline).stream().filter(item -> !isBlank(item.tradeDate())).limit(5).toList(),
@@ -374,41 +357,6 @@ public class AiBriefingService {
         return topSector + "活跃，涨停" + limitCount + "家，炸板" + brokenCount + "家。";
     }
 
-    private String extractContent(JsonNode root) {
-        if (root.path("choices").isArray() && !root.path("choices").isEmpty()) {
-            JsonNode choice = root.path("choices").get(0);
-            JsonNode content = choice.path("message").path("content");
-            if (!content.isMissingNode() && !content.asText().isBlank()) {
-                return content.asText();
-            }
-            JsonNode text = choice.path("text");
-            if (!text.isMissingNode() && !text.asText().isBlank()) {
-                return text.asText();
-            }
-        }
-        if (!root.path("reply").asText().isBlank()) {
-            return root.path("reply").asText();
-        }
-        if (!root.path("output_text").asText().isBlank()) {
-            return root.path("output_text").asText();
-        }
-        throw new IllegalStateException("无法从响应中提取 AI 文本");
-    }
-
-    private String extractJson(String content) {
-        String text = content == null ? "" : content.trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```(?:json)?\\s*", "");
-            text = text.replaceFirst("\\s*```$", "");
-        }
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            throw new IllegalStateException("AI 未返回有效 JSON");
-        }
-        return text.substring(start, end + 1);
-    }
-
     private List<String> strings(JsonNode node) {
         List<String> result = new ArrayList<>();
         if (!node.isArray()) {
@@ -425,10 +373,6 @@ public class AiBriefingService {
 
     private List<String> limitStrings(List<String> items, int maxSize) {
         return safeList(items).stream().map(String::trim).filter(item -> !item.isBlank()).limit(maxSize).toList();
-    }
-
-    private String text(JsonNode node, String field) {
-        return node.path(field).asText("").trim();
     }
 
     private String firstNonBlank(String... values) {

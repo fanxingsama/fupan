@@ -19,10 +19,6 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -40,23 +36,28 @@ public class UserStockAnalysisService {
 
     private static final Pattern DATE_PREFIX = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})_(.+)$");
     private static final String DEFAULT_DISCLAIMER = "AI 输出仅用于复盘与交易研究辅助，不构成投资建议。买卖点与动机均为基于截图、量价环境和消息面的高概率推断，仍需结合盘面自行判断。";
+    private static final String CACHE_SCENARIO = "user-stock-analysis:v1";
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final AiGatewayClient aiGatewayClient;
     private final MarketIntelligenceService marketIntelligenceService;
+    private final AiRequestCacheService aiRequestCacheService;
 
     public UserStockAnalysisService(AiProperties properties,
                                     ObjectMapper objectMapper,
-                                    MarketIntelligenceService marketIntelligenceService) {
+                                    MarketIntelligenceService marketIntelligenceService,
+                                    AiGatewayClient aiGatewayClient,
+                                    AiRequestCacheService aiRequestCacheService) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
         this.marketIntelligenceService = marketIntelligenceService;
+        this.aiGatewayClient = aiGatewayClient;
+        this.aiRequestCacheService = aiRequestCacheService;
     }
 
     public UserStockAnalysisResponse analyze(List<MultipartFile> files) {
-        if (!properties.enabled() || isBlank(properties.apiKey()) || isBlank(properties.baseUrl())) {
+        if (!aiGatewayClient.isConfigured()) {
             return new UserStockAnalysisResponse(
                     false,
                     properties.provider(),
@@ -82,7 +83,14 @@ public class UserStockAnalysisService {
         }
 
         try {
-            return requestAnalysis(files.size(), selectedImages);
+            String cacheKey = aiRequestCacheService.buildCacheKey(CACHE_SCENARIO, buildCachePayload(selectedImages));
+            var cached = aiRequestCacheService.load(cacheKey, UserStockAnalysisResponse.class);
+            if (cached.isPresent()) {
+                return cached.get();
+            }
+            UserStockAnalysisResponse response = requestAnalysis(files.size(), selectedImages);
+            aiRequestCacheService.save(cacheKey, CACHE_SCENARIO, response);
+            return response;
         } catch (Exception ex) {
             return new UserStockAnalysisResponse(
                     true,
@@ -108,20 +116,13 @@ public class UserStockAnalysisService {
             throws IOException, InterruptedException {
         JsonNode requestBody = buildRequestBody(selectedImages);
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(AiEndpointResolver.resolveChatCompletionsUrl(properties.baseUrl())))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + properties.apiKey())
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode() + " " + response.body());
-        }
-
-        String content = extractContent(objectMapper.readTree(response.body()));
-        JsonNode root = objectMapper.readTree(extractJson(content));
+        String content = aiGatewayClient.chatCompletion(requestBody);
+        JsonNode root = objectMapper.readTree(AiJsonSupport.extractJsonObject(content));
         return parseResponse(uploadedCount, selectedImages.size(), root);
+    }
+
+    private String buildCachePayload(List<UploadedDayImage> selectedImages) throws IOException {
+        return objectMapper.writeValueAsString(selectedImages);
     }
 
     private JsonNode buildRequestBody(List<UploadedDayImage> selectedImages) throws IOException {
@@ -155,9 +156,7 @@ public class UserStockAnalysisService {
                 .put("role", "user")
                 .set("content", userContent));
 
-        return objectMapper.createObjectNode()
-                .put("model", properties.model())
-                .set("messages", messages);
+        return aiGatewayClient.newChatRequest(messages);
     }
 
     private String buildInstructionPrompt(List<UploadedDayImage> selectedImages) {
@@ -210,26 +209,26 @@ public class UserStockAnalysisService {
     }
 
     private UserStockAnalysisResponse parseResponse(int uploadedCount, int analyzedDayCount, JsonNode root) {
-        List<String> styleTags = readStringList(root.path("styleTags"), 8);
-        List<String> patterns = readStringList(root.path("recurringPatterns"), 8);
-        List<String> methodology = readStringList(root.path("methodology"), 8);
-        List<String> risks = readStringList(root.path("riskWarnings"), 8);
+        List<String> styleTags = AiJsonSupport.readStringList(root.path("styleTags"), 8);
+        List<String> patterns = AiJsonSupport.readStringList(root.path("recurringPatterns"), 8);
+        List<String> methodology = AiJsonSupport.readStringList(root.path("methodology"), 8);
+        List<String> risks = AiJsonSupport.readStringList(root.path("riskWarnings"), 8);
 
         List<UserStockAnalysisResponse.DayAnalysis> dayAnalyses = new ArrayList<>();
         if (root.path("dayAnalyses").isArray()) {
             for (JsonNode item : root.path("dayAnalyses")) {
                 dayAnalyses.add(new UserStockAnalysisResponse.DayAnalysis(
-                        text(item, "tradeDate"),
-                        text(item, "imageName"),
-                        text(item, "imageType"),
-                        text(item, "summary"),
-                        readStringList(item.path("holdings"), 12),
-                        readStringList(item.path("inferredReasons"), 12),
-                        readStringList(item.path("probableBuyPoints"), 8),
-                        readStringList(item.path("probableSellPoints"), 8),
-                        readStringList(item.path("volumePriceClues"), 8),
-                        readStringList(item.path("newsDrivers"), 8),
-                        readStringList(item.path("nextDayFocus"), 8)
+                        AiJsonSupport.text(item, "tradeDate"),
+                        AiJsonSupport.text(item, "imageName"),
+                        AiJsonSupport.text(item, "imageType"),
+                        AiJsonSupport.text(item, "summary"),
+                        AiJsonSupport.readStringList(item.path("holdings"), 12),
+                        AiJsonSupport.readStringList(item.path("inferredReasons"), 12),
+                        AiJsonSupport.readStringList(item.path("probableBuyPoints"), 8),
+                        AiJsonSupport.readStringList(item.path("probableSellPoints"), 8),
+                        AiJsonSupport.readStringList(item.path("volumePriceClues"), 8),
+                        AiJsonSupport.readStringList(item.path("newsDrivers"), 8),
+                        AiJsonSupport.readStringList(item.path("nextDayFocus"), 8)
                 ));
             }
         }
@@ -241,8 +240,8 @@ public class UserStockAnalysisService {
                 "ready",
                 uploadedCount,
                 analyzedDayCount,
-                text(root, "overallConclusion"),
-                text(root, "tradingStyleProfile"),
+                AiJsonSupport.text(root, "overallConclusion"),
+                AiJsonSupport.text(root, "tradingStyleProfile"),
                 styleTags,
                 patterns,
                 methodology,
@@ -369,73 +368,6 @@ public class UserStockAnalysisService {
         graphics.drawImage(source, 0, 0, newWidth, newHeight, null);
         graphics.dispose();
         return resized;
-    }
-
-    private String extractContent(JsonNode root) {
-        if (root.path("choices").isArray() && !root.path("choices").isEmpty()) {
-            JsonNode choice = root.path("choices").get(0);
-            JsonNode content = choice.path("message").path("content");
-            if (content.isTextual() && !content.asText().isBlank()) {
-                return content.asText();
-            }
-            if (content.isArray()) {
-                StringBuilder builder = new StringBuilder();
-                for (JsonNode item : content) {
-                    if (item.has("text")) {
-                        builder.append(item.path("text").asText()).append("\n");
-                    }
-                }
-                if (!builder.toString().isBlank()) {
-                    return builder.toString();
-                }
-            }
-            JsonNode text = choice.path("text");
-            if (!text.isMissingNode() && !text.asText().isBlank()) {
-                return text.asText();
-            }
-        }
-        if (!root.path("reply").asText().isBlank()) {
-            return root.path("reply").asText();
-        }
-        if (!root.path("output_text").asText().isBlank()) {
-            return root.path("output_text").asText();
-        }
-        throw new IllegalStateException("无法从响应中提取 AI 文本");
-    }
-
-    private String extractJson(String content) {
-        String text = content == null ? "" : content.trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```(?:json)?\\s*", "");
-            text = text.replaceFirst("\\s*```$", "");
-        }
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            throw new IllegalStateException("AI 未返回有效 JSON");
-        }
-        return text.substring(start, end + 1);
-    }
-
-    private List<String> readStringList(JsonNode node, int maxSize) {
-        List<String> result = new ArrayList<>();
-        if (!node.isArray()) {
-            return result;
-        }
-        for (JsonNode item : node) {
-            String value = item.asText("").trim();
-            if (!value.isBlank()) {
-                result.add(value);
-            }
-            if (result.size() >= maxSize) {
-                break;
-            }
-        }
-        return result;
-    }
-
-    private String text(JsonNode node, String field) {
-        return node.path(field).asText("").trim();
     }
 
     private ParsedFilename parseFilename(String filename) {

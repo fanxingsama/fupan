@@ -11,10 +11,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,18 +23,18 @@ public class AiSummaryService {
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final AiGatewayClient aiGatewayClient;
     private final JdbcTemplate jdbc;
 
-    public AiSummaryService(AiProperties properties, ObjectMapper objectMapper, JdbcTemplate jdbc) {
+    public AiSummaryService(AiProperties properties, ObjectMapper objectMapper, JdbcTemplate jdbc, AiGatewayClient aiGatewayClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
         this.jdbc = jdbc;
+        this.aiGatewayClient = aiGatewayClient;
     }
 
     public AiSummary generateOrLoad(DailyRecapReport report, MarketIndicators indicators, TradePlan tradePlan, boolean refresh) {
-        if (!properties.enabled() || isBlank(properties.apiKey()) || isBlank(properties.baseUrl())) {
+        if (!aiGatewayClient.isConfigured()) {
             return new AiSummary(
                     false,
                     false,
@@ -109,9 +105,7 @@ public class AiSummaryService {
     private AiSummary requestSummary(DailyRecapReport report, MarketIndicators indicators, TradePlan tradePlan) throws IOException, InterruptedException {
         String prompt = buildPrompt(report, indicators, tradePlan);
 
-        JsonNode requestBody = objectMapper.createObjectNode()
-                .put("model", properties.model())
-                .set("messages", objectMapper.createArrayNode()
+        JsonNode requestBody = aiGatewayClient.newChatRequest(objectMapper.createArrayNode()
                         .add(objectMapper.createObjectNode()
                                 .put("role", "system")
                                 .put("content", "你是A股短线交易复盘助手。请根据输入数据输出高密度、克制、可执行的复盘总结。不要保证收益，不要空话。")
@@ -121,20 +115,7 @@ public class AiSummaryService {
                                 .put("content", prompt)
                         )
                 );
-
-        HttpRequest request = HttpRequest.newBuilder(URI.create(AiEndpointResolver.resolveChatCompletionsUrl(properties.baseUrl())))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + properties.apiKey())
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode() + " " + response.body());
-        }
-
-        JsonNode root = objectMapper.readTree(response.body());
-        String content = extractContent(root);
+        String content = aiGatewayClient.chatCompletion(requestBody);
         List<String> bullets = parseBullets(content);
 
         return new AiSummary(
@@ -173,27 +154,6 @@ public class AiSummaryService {
                 平台生成的次日计划：
                 %s
                 """.formatted(reportJson, indicatorJson, planJson);
-    }
-
-    private String extractContent(JsonNode root) {
-        if (root.path("choices").isArray() && !root.path("choices").isEmpty()) {
-            JsonNode choice = root.path("choices").get(0);
-            JsonNode content = choice.path("message").path("content");
-            if (!content.isMissingNode() && !content.asText().isBlank()) {
-                return content.asText();
-            }
-            JsonNode text = choice.path("text");
-            if (!text.isMissingNode() && !text.asText().isBlank()) {
-                return text.asText();
-            }
-        }
-        if (!root.path("reply").asText().isBlank()) {
-            return root.path("reply").asText();
-        }
-        if (!root.path("output_text").asText().isBlank()) {
-            return root.path("output_text").asText();
-        }
-        throw new IllegalStateException("无法从响应中提取 AI 文本");
     }
 
     private List<String> parseBullets(String content) {

@@ -20,6 +20,7 @@
 - 复盘内容覆盖炸板、连板、首板、跌停、板块强弱、10 日涨幅榜和涨跌家数
 - 保留 `mock` 采集器作为离线演示兜底
 - 前端使用 Vue 2 Options API 展示复盘总览、板块强弱和历史记录
+- AI 调用默认走 OpenAI 兼容网关，可直接接入 LiteLLM 统一管理模型、密钥和后备路由
 
 ## 启动
 
@@ -40,6 +41,32 @@ npm run dev
 
 前端默认访问 `http://localhost:8080/api`。
 
+## LiteLLM 接入
+
+项目后端现在默认按 LiteLLM 的 OpenAI 兼容入口读取 AI 配置：
+
+- `AI_BASE_URL=http://127.0.0.1:4000/v1`
+- `AI_MODEL=recap-main`
+- `AI_API_KEY=sk-local-litellm`
+
+推荐做法：
+
+1. 复制 [backend/litellm/config.yaml.example](C:\Users\myl\Desktop\fupan\backend\litellm\config.yaml.example) 为你自己的 `backend/litellm/config.yaml`
+2. 在 `backend/.env` 里填好 `LITELLM_MASTER_KEY`、上游模型 `API_BASE`、`API_KEY`
+3. 直接运行项目启动脚本，或先启动 LiteLLM 代理再启动 Spring Boot 后端
+
+LiteLLM 代理示例：
+
+```powershell
+cd backend
+uv tool install "litellm[proxy]"
+litellm --config .\litellm\config.yaml
+```
+
+如果你平时是双击 [启动每日复盘.bat](C:\Users\myl\Desktop\fupan\启动每日复盘.bat) 或运行 [scripts/start_all.ps1](C:\Users\myl\Desktop\fupan\scripts\start_all.ps1)，现在后端启动脚本会在检测到 `AI_PROVIDER=litellm` 且本地代理未启动时，自动拉起 LiteLLM。
+
+如果你暂时不想用 LiteLLM，也可以继续把 `AI_BASE_URL` 指向任意 OpenAI 兼容接口，后端代码无需再改。
+
 ## 真实数据采集要求
 
 - Python 3.10+
@@ -50,8 +77,8 @@ npm run dev
 
 ## 保存历史
 
-- Spring Boot 后端会将每个交易日的复盘结果保存到 `backend/data/<tradeDate>.json`
-- 前端的历史记录列表就是读取这些历史文件生成的
+- Spring Boot 后端当前使用 SQLite 保存复盘、AI 摘要、AI 分析和交易日志
+- 主要数据库文件为 `backend/recap.db`
 
 ## 一键使用
 

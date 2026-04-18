@@ -4,6 +4,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $backendDir = Join-Path $projectRoot "backend"
 $toolsDir = Join-Path $projectRoot "tools"
 $setupScript = Join-Path $PSScriptRoot "setup_local_env.ps1"
+$litellmScript = Join-Path $PSScriptRoot "start_litellm.ps1"
 $envFile = Join-Path $backendDir ".env"
 $mavenCmd = $null
 $jdkHome = $null
@@ -67,6 +68,46 @@ if (Test-Path $envFile) {
         $value = $parts[1].Trim()
         Set-Item -Path "Env:$name" -Value $value
         [Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
+}
+
+function Test-HttpReady {
+    param(
+        [string]$Url,
+        [string]$BearerToken
+    )
+    try {
+        $headers = @{}
+        if ($BearerToken) {
+            $headers["Authorization"] = "Bearer $BearerToken"
+        }
+        Invoke-WebRequest -Uri $Url -Headers $headers -UseBasicParsing -TimeoutSec 2 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+$aiProvider = $env:AI_PROVIDER
+$aiBaseUrl = $env:AI_BASE_URL
+$shouldStartLiteLlm = $env:AI_ENABLED -eq "true" -and (
+    $aiProvider -eq "litellm" -or
+    $aiBaseUrl -like "http://127.0.0.1:4000/*" -or
+    $aiBaseUrl -like "http://localhost:4000/*"
+)
+
+if ($shouldStartLiteLlm) {
+    $litellmHealth = ($aiBaseUrl -replace '/v1/?$', '') + "/v1/models"
+    if (-not (Test-HttpReady -Url $litellmHealth -BearerToken $env:AI_API_KEY)) {
+        Write-Host "Starting LiteLLM proxy..."
+        Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", $litellmScript
+        for ($i = 0; $i -lt 20; $i++) {
+            if (Test-HttpReady -Url $litellmHealth -BearerToken $env:AI_API_KEY) {
+                Write-Host "LiteLLM is reachable: $litellmHealth"
+                break
+            }
+            Start-Sleep -Seconds 1
+        }
     }
 }
 

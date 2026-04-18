@@ -300,9 +300,6 @@
 <script>
 import { cellClass, displayValue, percentClass } from '../utils/format'
 import { FOCUS_DETAIL_COLUMNS } from '../utils/columns'
-import AiBriefingPanel from './AiBriefingPanel.vue'
-import AiInsightPanel from './AiInsightPanel.vue'
-import AiSummaryPanel from './AiSummaryPanel.vue'
 import {
   buildTrendOption,
   buildDualTrendOption,
@@ -311,6 +308,10 @@ import {
   buildLadderOption,
   ensureChart
 } from '../utils/chart'
+
+const AiBriefingPanel = () => import('./AiBriefingPanel.vue')
+const AiInsightPanel = () => import('./AiInsightPanel.vue')
+const AiSummaryPanel = () => import('./AiSummaryPanel.vue')
 
 export default {
   name: 'OverviewPage',
@@ -445,10 +446,10 @@ export default {
         try { chart.resize() } catch (_) {}
       })
     },
-    renderCharts() {
+    async renderCharts() {
       if (!this.recap) return
 
-      const ladderChart = ensureChart(this.chartMap, 'ladder', this.$refs.ladderChart)
+      const ladderChart = await ensureChart(this.chartMap, 'ladder', this.$refs.ladderChart)
       if (ladderChart) ladderChart.setOption(buildLadderOption(this.boardLadder), true)
 
       if (this.trendPoints.length) {
@@ -457,8 +458,8 @@ export default {
         const sealRates = this.trendPoints.map(point => point.sealRate)
         const limitTotals = this.trendPoints.map(point => point.limitUpTotal)
 
-        const upTrend = ensureChart(this.chartMap, 'upTrend', this.$refs.upTrendChart)
-        const sealRateTrend = ensureChart(this.chartMap, 'sealRateTrend', this.$refs.sealRateTrendChart)
+        const upTrend = await ensureChart(this.chartMap, 'upTrend', this.$refs.upTrendChart)
+        const sealRateTrend = await ensureChart(this.chartMap, 'sealRateTrend', this.$refs.sealRateTrendChart)
 
         if (upTrend) upTrend.setOption(buildTrendOption(upCounts, dates, '#f97316'), true)
         if (sealRateTrend) {
@@ -469,8 +470,8 @@ export default {
         }
       }
 
-      const focusChart = ensureChart(this.chartMap, 'focus', this.$refs.focusChart)
-      const upSectorChart = ensureChart(this.chartMap, 'upSector', this.$refs.upSectorChart)
+      const focusChart = await ensureChart(this.chartMap, 'focus', this.$refs.focusChart)
+      const upSectorChart = await ensureChart(this.chartMap, 'upSector', this.$refs.upSectorChart)
 
       if (focusChart) {
         focusChart.setOption(buildFocusOption(this.recap.firstLimitSectorFocus || {}), true)

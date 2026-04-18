@@ -127,15 +127,16 @@ import {
 } from './utils/trading'
 
 import RecapCalendar from './components/RecapCalendar.vue'
-import OverviewPage from './components/OverviewPage.vue'
-import TabbedTablePage from './components/TabbedTablePage.vue'
-import HighRankPage from './components/HighRankPage.vue'
-import TradeJournalPage from './components/TradeJournalPage.vue'
-import UserStockAnalysisPage from './components/UserStockAnalysisPage.vue'
-import StockAiAnalysisPage from './components/StockAiAnalysisPage.vue'
-import AiChatPage from './components/AiChatPage.vue'
 import OverwriteDialog from './components/OverwriteDialog.vue'
 import ToastBar from './components/ToastBar.vue'
+
+const OverviewPage = () => import('./components/OverviewPage.vue')
+const TabbedTablePage = () => import('./components/TabbedTablePage.vue')
+const HighRankPage = () => import('./components/HighRankPage.vue')
+const TradeJournalPage = () => import('./components/TradeJournalPage.vue')
+const UserStockAnalysisPage = () => import('./components/UserStockAnalysisPage.vue')
+const StockAiAnalysisPage = () => import('./components/StockAiAnalysisPage.vue')
+const AiChatPage = () => import('./components/AiChatPage.vue')
 
 export default {
   name: 'App',

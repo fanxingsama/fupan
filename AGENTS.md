@@ -1,6 +1,6 @@
 # AGENTS.md — AI 编码助手项目指引
 
-> 本文件供所有 AI 编码工具（GitHub Copilot、Claude、Cursor、Windsurf 等）读取，以快速理解项目并减少不必要的文件扫描。
+> 本文件供所有 AI 编码工具（GitHub Copilot、Claude、Codex、Cursor、Windsurf 等）读取，以快速理解项目并减少不必要的文件扫描。
 
 ## 推荐阅读顺序
 

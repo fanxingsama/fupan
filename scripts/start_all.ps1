@@ -7,7 +7,23 @@ $backendUrl = "http://localhost:8080/api/recaps"
 $frontendUrl = $null
 
 Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", $backendScript
-Start-Sleep -Seconds 2
+
+$backendReady = $false
+for ($i = 0; $i -lt 90 -and -not $backendReady; $i++) {
+    try {
+        Invoke-WebRequest -Uri $backendUrl -UseBasicParsing -TimeoutSec 2 | Out-Null
+        $backendReady = $true
+    } catch {
+        Start-Sleep -Seconds 2
+    }
+}
+
+if (-not $backendReady) {
+    Write-Host "Backend did not become reachable in time. Starting frontend anyway."
+} else {
+    Write-Host "Backend is reachable: $backendUrl"
+}
+
 Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", $frontendScript
 
 $frontendReady = $false
@@ -33,10 +49,3 @@ if (-not $frontendReady) {
 }
 
 Start-Process $frontendUrl
-
-try {
-    Invoke-WebRequest -Uri $backendUrl -UseBasicParsing -TimeoutSec 2 | Out-Null
-    Write-Host "Backend is reachable: $backendUrl"
-} catch {
-    Write-Host "Backend is still starting. The page may show API errors briefly."
-}

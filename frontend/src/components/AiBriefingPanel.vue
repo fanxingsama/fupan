@@ -3,7 +3,7 @@
     <div class="section-head">
       <div>
         <h2>AI 情报中心</h2>
-        <p class="muted section-subtitle">多源情报先采集，AI 再做整理。你既能看简报，也能回看原始情报流。</p>
+        <p class="muted section-subtitle">多源情报先采集，AI 再做整理，聚焦真正有用的题材与个股情报。</p>
       </div>
       <button class="close-btn" :disabled="loading" @click="loadAll(true)">
         {{ loading ? '生成中...' : '刷新情报' }}
@@ -123,25 +123,6 @@
             </div>
           </section>
         </div>
-
-        <section v-if="intelligence.feedItems?.length" class="briefing-card">
-          <h3>原始情报流</h3>
-          <div class="feed-list">
-            <article v-for="item in intelligence.feedItems.slice(0, 12)" :key="item.id" class="feed-item">
-              <div class="feed-meta">
-                <strong>{{ item.source }}</strong>
-                <span>{{ item.type }}</span>
-                <small>{{ item.publishedAt || '实时' }}</small>
-              </div>
-              <h4>{{ item.title }}</h4>
-              <p>{{ item.summary }}</p>
-              <div class="tag-list">
-                <span v-for="tag in item.tags || []" :key="item.id + tag" class="tag">{{ tag }}</span>
-              </div>
-              <a v-if="item.url" :href="item.url" target="_blank" rel="noreferrer" class="feed-link">查看来源</a>
-            </article>
-          </div>
-        </section>
       </template>
     </div>
   </article>

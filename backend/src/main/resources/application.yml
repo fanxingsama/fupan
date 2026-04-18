@@ -25,11 +25,12 @@ recap:
 
 ai:
   enabled: ${AI_ENABLED:false}
-  provider: minimax
+  provider: ${AI_PROVIDER:litellm}
   api-key: ${AI_API_KEY:}
-  base-url: ${AI_BASE_URL:https://api.minimaxi.com/v1}
-  model: ${AI_MODEL:MiniMax-Text-01}
+  base-url: ${AI_BASE_URL:http://127.0.0.1:4000/v1}
+  model: ${AI_MODEL:recap-main}
   summary-storage-root: ai-summaries
+  timeout-seconds: ${AI_TIMEOUT_SECONDS:120}
 
 trade-journal:
   storage-root: trade-journal

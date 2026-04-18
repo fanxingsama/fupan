@@ -1,0 +1,19 @@
+model_list:
+  - model_name: recap-main
+    litellm_params:
+      model: openai/MiniMax-M2.7
+      api_base: os.environ/MINIMAX_API_BASE
+      api_key: os.environ/MINIMAX_API_KEY
+
+  - model_name: recap-fallback
+    litellm_params:
+      model: openai/MiniMax-Text-01
+      api_base: os.environ/MINIMAX_API_BASE
+      api_key: os.environ/MINIMAX_API_KEY
+
+litellm_settings:
+  set_verbose: false
+  request_timeout: 120
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

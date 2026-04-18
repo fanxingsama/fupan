@@ -38,7 +38,10 @@ C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiBriefingService.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiChatService.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiEndpointResolver.java
+C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiGatewayClient.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiInsightService.java
+C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiJsonSupport.java
+C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiRequestCacheService.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiSummaryService.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\DataMigrationRunner.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\IndicatorService.java

@@ -49,6 +49,12 @@
       "sourceType": "com.meirifupan.backend.config.AiProperties"
     },
     {
+      "name": "ai.timeout-seconds",
+      "type": "java.lang.Integer",
+      "sourceType": "com.meirifupan.backend.config.AiProperties",
+      "defaultValue": 0
+    },
+    {
       "name": "recap.collector-script",
       "type": "java.lang.String",
       "sourceType": "com.meirifupan.backend.config.RecapProperties"

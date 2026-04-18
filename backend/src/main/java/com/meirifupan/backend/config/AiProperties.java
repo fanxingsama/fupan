@@ -9,6 +9,7 @@ public record AiProperties(
         String apiKey,
         String baseUrl,
         String model,
-        String summaryStorageRoot
+        String summaryStorageRoot,
+        int timeoutSeconds
 ) {
 }
