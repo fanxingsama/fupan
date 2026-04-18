@@ -74,8 +74,6 @@ export const FIRST_LIMIT_ENHANCED_COLUMNS = [
   BASE_COLUMNS.amount,
   BASE_COLUMNS.floatMarketValue,
   BASE_COLUMNS.sealAmount,
-  BASE_COLUMNS.turnoverRate,
-  BASE_COLUMNS.amplitude,
   BASE_COLUMNS.extraTag,
   BASE_COLUMNS.reason
 ]

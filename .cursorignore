@@ -1,0 +1,15 @@
+# Cursor AI 不应索引/读取的文件
+backend/target/
+backend/data/*.json
+backend/recap.db
+backend/out.json
+backend/.venv/
+backend/scripts/__pycache__/
+frontend/node_modules/
+frontend/dist/
+tools/
+*.log
+logs/
+*.jar
+*.zip
+*.class

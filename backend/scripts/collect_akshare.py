@@ -11,9 +11,12 @@ import json
 import math
 import os
 import re
+import shutil
+import subprocess
 import time
 from collections import Counter
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 import requests
@@ -67,6 +70,19 @@ THS_HEADERS = {
     ),
     "Referer": "https://www.10jqka.com.cn/",
 }
+JY_FETCH_SCRIPT = Path(__file__).with_name("fetch_jiuyangongshe_action.js")
+JY_NODE_MODULES_CANDIDATES = [
+    os.environ.get("NODE_PATH", ""),
+    str(
+        Path.home()
+        / ".cache"
+        / "codex-runtimes"
+        / "codex-primary-runtime"
+        / "dependencies"
+        / "node"
+        / "node_modules"
+    ),
+]
 
 
 # 这一组工具函数负责把 AKShare / 东财的原始字段清洗成统一格式，
@@ -78,6 +94,13 @@ def clean_text(value: Any) -> str:
         return ""
     text = str(value).strip()
     return "" if text.lower() == "nan" else text
+
+
+def clean_reason_text(value: Any) -> str:
+    text = clean_text(value)
+    if re.fullmatch(r"\d+\s*/\s*\d+", text):
+        return ""
+    return text
 
 
 def normalize_code(value: Any) -> str:
@@ -233,6 +256,94 @@ def normalize_trade_date_value(value: Any) -> str:
         if len(text) == 8:
             return f"{text[:4]}-{text[4:6]}-{text[6:]}"
     return text[:10]
+
+
+def resolve_node_executable() -> str | None:
+    candidates = [
+        os.environ.get("JIUYANGONGSHE_NODE"),
+        os.environ.get("NODE"),
+        shutil.which("node"),
+        r"C:\Program Files\nodejs\node.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return candidate
+    return None
+
+
+def build_node_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if clean_text(env.get("NODE_PATH")):
+        return env
+    for candidate in JY_NODE_MODULES_CANDIDATES:
+        if candidate and Path(candidate).exists():
+            env["NODE_PATH"] = candidate
+            return env
+    return env
+
+
+def build_jiuyangongshe_reason_map(trade_date: str) -> dict[str, dict[str, str]]:
+    node_executable = resolve_node_executable()
+    if node_executable is None or not JY_FETCH_SCRIPT.exists():
+        return {}
+
+    try:
+        completed = subprocess.run(
+            [
+                node_executable,
+                str(JY_FETCH_SCRIPT),
+                "--mode",
+                "fetch",
+                "--date",
+                trade_date,
+                "--auto-login",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=build_node_env(),
+            timeout=180,
+            check=False,
+        )
+    except Exception:
+        return {}
+
+    if completed.returncode != 0:
+        return {}
+
+    payload_text = clean_text(completed.stdout).splitlines()
+    if not payload_text:
+        return {}
+
+    try:
+        payload = json.loads(payload_text[-1])
+    except json.JSONDecodeError:
+        return {}
+
+    if not payload.get("ok"):
+        return {}
+
+    result: dict[str, dict[str, str]] = {}
+    for entry in payload.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        stock_name = clean_text(entry.get("stockName"))
+        stock_code = normalize_code(entry.get("stockCode"))
+        reason = clean_text(entry.get("reason"))
+        field_name = clean_text(entry.get("fieldName"))
+        if not reason:
+            continue
+        item = {
+            "name": stock_name,
+            "code": stock_code,
+            "reason": reason,
+            "fieldName": field_name,
+        }
+        if stock_code:
+            result[f"code:{stock_code}"] = item
+        if stock_name:
+            result[f"name:{stock_name}"] = item
+    return result
 
 
 def parse_trade_dates(rows: list[dict[str, Any]]) -> list[str]:
@@ -563,6 +674,19 @@ def enrich_rows_with_ths_reason(rows: list[dict[str, str]], reason_map: dict[str
     return enriched
 
 
+def enrich_rows_with_jiuyangongshe_reason(rows: list[dict[str, str]], reason_map: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+    enriched: list[dict[str, str]] = []
+    for row in rows:
+        current = dict(row)
+        code_key = f"code:{normalize_code(current.get('code'))}"
+        name_key = f"name:{clean_text(current.get('name'))}"
+        reason_item = reason_map.get(code_key) or reason_map.get(name_key)
+        if reason_item and clean_text(reason_item.get("reason")):
+            current["reason"] = clean_text(reason_item["reason"])
+        enriched.append(current)
+    return enriched
+
+
 def map_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     mapped: list[dict[str, str]] = []
     for row in rows:
@@ -578,7 +702,7 @@ def map_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
                 concept=industry,
                 amount=format_amount(first_present(row, K_AMOUNT)),
                 float_market_value=format_amount(first_present(row, K_FLOAT_MV)),
-                reason=clean_text(first_present(row, K_LIMIT_STAT)),
+                reason=clean_reason_text(first_present(row, K_LIMIT_STAT)),
                 seal_amount=format_amount(first_present(row, K_SEAL_FUND)),
                 turnover_rate=format_percent(first_present(row, K_TURNOVER)),
                 amplitude=format_percent(first_present(row, K_AMPLITUDE)),
@@ -929,7 +1053,9 @@ def main() -> None:
         time.sleep(args.sleep)
         previous_broken_rows = safe_call(ak.stock_zt_pool_zbgc_em, date=previous_trade_date_em)
 
-    ths_reason_map = build_ths_limit_reason_map(f"{trade_date_em[:4]}-{trade_date_em[4:6]}-{trade_date_em[6:]}")
+    jiuyangongshe_reason_map = build_jiuyangongshe_reason_map(
+        f"{trade_date_em[:4]}-{trade_date_em[4:6]}-{trade_date_em[6:]}"
+    )
 
     limit_up_all = map_limit_up(limit_up_rows)
     first_limit_today = map_first_limit(limit_up_all)
@@ -940,9 +1066,12 @@ def main() -> None:
     previous_limit_up_feedback = map_consecutive_limit(map_previous_limit_up(previous_limit_up_rows))
     previous_first_limit_feedback = map_previous_first_limit(previous_limit_up_rows)
 
-    limit_up_today = enrich_rows_with_ths_reason(limit_up_today, ths_reason_map)
-    first_limit_today = enrich_rows_with_ths_reason(first_limit_today, ths_reason_map)
-    previous_first_limit_feedback = enrich_rows_with_ths_reason(previous_first_limit_feedback, ths_reason_map)
+    limit_up_today = enrich_rows_with_jiuyangongshe_reason(limit_up_today, jiuyangongshe_reason_map)
+    first_limit_today = enrich_rows_with_jiuyangongshe_reason(first_limit_today, jiuyangongshe_reason_map)
+    previous_first_limit_feedback = enrich_rows_with_jiuyangongshe_reason(
+        previous_first_limit_feedback,
+        jiuyangongshe_reason_map,
+    )
 
     top_up_sectors = map_sector_rows(concept_rows, top=True)
     top_down_sectors = map_sector_rows(concept_rows, top=False)
@@ -977,8 +1106,8 @@ def main() -> None:
         "top10DayGainGemStar": map_top_10_day(ten_day_rows, is_gem_star, market_index),
         "top10DayGainMainBoard": map_top_10_day(ten_day_rows, is_main_board, market_index),
         "firstLimitSectorFocus": first_limit_focus(first_limit_today),
-        "dataSource": "akshare+10jqka",
-        "notes": "\u884c\u60c5\u6570\u636e\u6765\u81ea AKShare \u516c\u5f00 A \u80a1\u63a5\u53e3\uff1b\u6da8\u505c\u539f\u56e0\u4f18\u5148\u8865\u5145\u540c\u82b1\u987a\u201c\u6da8\u505c\u96f7\u8fbe\u201d\u516c\u5f00\u9875\u9762\uff1b\u5f53\u4e0a\u6e38\u677f\u5757\u699c\u5355\u4e0d\u53ef\u7528\u65f6\uff0c\u4f1a\u7528\u5df2\u91c7\u96c6\u7684\u4e2a\u80a1\u6570\u636e\u53cd\u63a8\u677f\u5757\u5f3a\u5f31\u3002",
+        "dataSource": "akshare+jiuyangongshe",
+        "notes": "\u884c\u60c5\u6570\u636e\u6765\u81ea AKShare \u516c\u5f00 A \u80a1\u63a5\u53e3\uff1b\u6da8\u505c\u539f\u56e0\u4f18\u5148\u901a\u8fc7\u97ed\u7814\u516c\u793e\u5df2\u767b\u5f55\u4f1a\u8bdd\u6293\u53d6\u201c\u5168\u90e8\u5f02\u52a8\u89e3\u6790\u201d\u9875\u6570\u636e\uff1b\u82e5\u4f1a\u8bdd\u8fc7\u671f\uff0c\u9700\u91cd\u65b0\u767b\u5f55\u4e13\u7528\u4f1a\u8bdd\u3002\u5f53\u4e0a\u6e38\u677f\u5757\u699c\u5355\u4e0d\u53ef\u7528\u65f6\uff0c\u4f1a\u7528\u5df2\u91c7\u96c6\u7684\u4e2a\u80a1\u6570\u636e\u53cd\u63a8\u677f\u5757\u5f3a\u5f31\u3002",
     }
     print(json.dumps(report, ensure_ascii=False))
 
