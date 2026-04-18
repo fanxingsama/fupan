@@ -2,19 +2,24 @@ package com.meirifupan.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.meirifupan.backend.config.AiProperties;
-import com.meirifupan.backend.config.RecapProperties;
-import com.meirifupan.backend.model.StockAiAnalysisRequest;
 import com.meirifupan.backend.model.StockAiAnalysisResponse;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.InputStreamReader;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 public class StockAiAnalysisService {
@@ -22,26 +27,23 @@ public class StockAiAnalysisService {
     private static final String DISCLAIMER = "仅用于量价关系与裸K学习，不构成投资建议。分钟级数据更适合训练节奏感，不适合机械跟单。";
     private static final String CACHE_SCENARIO = "stock-ai-analysis:v1";
 
-    private final RecapProperties recapProperties;
     private final AiProperties aiProperties;
     private final ObjectMapper objectMapper;
     private final AiGatewayClient aiGatewayClient;
     private final AiRequestCacheService aiRequestCacheService;
 
-    public StockAiAnalysisService(RecapProperties recapProperties,
-                                  AiProperties aiProperties,
+    public StockAiAnalysisService(AiProperties aiProperties,
                                   ObjectMapper objectMapper,
                                   AiGatewayClient aiGatewayClient,
                                   AiRequestCacheService aiRequestCacheService) {
-        this.recapProperties = recapProperties;
         this.aiProperties = aiProperties;
         this.objectMapper = objectMapper;
         this.aiGatewayClient = aiGatewayClient;
         this.aiRequestCacheService = aiRequestCacheService;
     }
 
-    public StockAiAnalysisResponse analyze(StockAiAnalysisRequest request) {
-        JsonNode stockData = collectBars(request.stockCode(), request.timeframe());
+    public StockAiAnalysisResponse analyze(MultipartFile file, String timeframe, String stockCode, String stockName) {
+        JsonNode stockData = parseUploadedBars(file, timeframe, stockCode, stockName);
         if (!aiEnabled()) {
             return buildFallbackResponse(stockData, "disabled");
         }
@@ -61,50 +63,76 @@ public class StockAiAnalysisService {
         }
     }
 
-    private JsonNode collectBars(String stockCode, String timeframe) {
-        Path scriptPath = Path.of("scripts", "collect_stock_bars.py").toAbsolutePath();
-        if (!Files.exists(scriptPath)) {
-            throw new IllegalStateException("Stock collector script not found: " + scriptPath);
+    private JsonNode parseUploadedBars(MultipartFile file, String timeframe, String stockCode, String stockName) {
+        String normalizedTimeframe = normalizeTimeframe(timeframe);
+        String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        String lowerName = filename.toLowerCase(Locale.ROOT);
+        List<UploadedBar> bars = lowerName.endsWith(".json")
+                ? parseJsonBars(file)
+                : parseDelimitedBars(file);
+        if (bars.isEmpty()) {
+            throw new IllegalArgumentException("上传文件里没有识别到有效K线数据，请检查列名或内容格式");
         }
+        bars.sort(Comparator.comparing(UploadedBar::time));
 
-        List<String> command = new ArrayList<>();
-        command.add(recapProperties.pythonExecutable());
-        command.add("-X");
-        command.add("utf8");
-        command.add(scriptPath.toString());
-        command.add("--code");
-        command.add(stockCode);
-        command.add("--timeframe");
-        command.add(timeframe);
-
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.directory(scriptPath.getParent().toFile());
-        processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
-        processBuilder.environment().put("PYTHONUTF8", "1");
-        processBuilder.environment().remove("HTTP_PROXY");
-        processBuilder.environment().remove("HTTPS_PROXY");
-        processBuilder.environment().remove("ALL_PROXY");
-        processBuilder.environment().remove("http_proxy");
-        processBuilder.environment().remove("https_proxy");
-        processBuilder.environment().remove("all_proxy");
-        processBuilder.environment().put("NO_PROXY", "*");
-        processBuilder.environment().put("no_proxy", "*");
-
-        try {
-            Process process = processBuilder.start();
-            String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new IllegalStateException("Stock collector failed: " + stderr);
+        String resolvedCode = sanitizeStockCode(stockCode);
+        String resolvedName = trimToEmpty(stockName);
+        if (resolvedCode.isBlank()) {
+            for (UploadedBar bar : bars) {
+                if (!bar.stockCode().isBlank()) {
+                    resolvedCode = sanitizeStockCode(bar.stockCode());
+                    break;
+                }
             }
-            return objectMapper.readTree(stdout);
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to execute stock collector script.", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Stock collector interrupted.", e);
         }
+        if (resolvedName.isBlank()) {
+            for (UploadedBar bar : bars) {
+                if (!bar.stockName().isBlank()) {
+                    resolvedName = trimToEmpty(bar.stockName());
+                    break;
+                }
+            }
+        }
+        if (resolvedCode.isBlank()) {
+            resolvedCode = inferCodeFromFilename(filename);
+        }
+        if (resolvedName.isBlank()) {
+            resolvedName = inferNameFromFilename(filename);
+        }
+
+        if (resolvedCode.isBlank()) {
+            resolvedCode = "UPLOAD";
+        }
+        if (resolvedName.isBlank()) {
+            resolvedName = resolvedCode;
+        }
+
+        ArrayList<StockAiAnalysisResponse.CandleBar> candleBars = new ArrayList<>();
+        for (UploadedBar item : bars) {
+            candleBars.add(new StockAiAnalysisResponse.CandleBar(
+                    item.time(),
+                    item.open(),
+                    item.close(),
+                    item.high(),
+                    item.low(),
+                    item.volume(),
+                    item.amount(),
+                    item.changePercent(),
+                    item.amplitudePercent()
+            ));
+        }
+
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("stockCode", resolvedCode);
+        root.put("stockName", resolvedName);
+        root.put("timeframe", normalizedTimeframe);
+        root.put("timeframeLabel", timeframeLabel(normalizedTimeframe));
+        root.put("source", "upload");
+        root.put("analyzedBars", candleBars.size());
+        root.set("signals", objectMapper.valueToTree(buildSignals(candleBars)));
+        root.set("metrics", summarizeBars(candleBars));
+        root.set("bars", objectMapper.valueToTree(candleBars));
+        return root;
     }
 
     private JsonNode requestAiAnalysis(JsonNode stockData) throws IOException, InterruptedException {
@@ -274,6 +302,289 @@ public class StockAiAnalysisService {
 
     private boolean aiEnabled() {
         return aiGatewayClient.isConfigured();
+    }
+
+    private List<UploadedBar> parseJsonBars(MultipartFile file) {
+        try {
+            JsonNode root = objectMapper.readTree(file.getInputStream());
+            JsonNode rows = root;
+            if (root.isObject()) {
+                rows = root.path("bars").isArray() ? root.path("bars") : root.path("data");
+            }
+            if (!rows.isArray()) {
+                throw new IllegalArgumentException("JSON 文件必须是数组，或包含 bars/data 数组");
+            }
+            List<UploadedBar> result = new ArrayList<>();
+            for (JsonNode node : rows) {
+                UploadedBar item = toUploadedBar(jsonToMap(node));
+                if (item != null) {
+                    result.add(item);
+                }
+            }
+            return result;
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("无法解析 JSON 历史数据文件", ex);
+        }
+    }
+
+    private List<UploadedBar> parseDelimitedBars(MultipartFile file) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
+            String firstLine = reader.readLine();
+            if (firstLine == null) {
+                return List.of();
+            }
+            String delimiter = detectDelimiter(firstLine);
+            List<String> headers = parseDelimitedLine(firstLine, delimiter.charAt(0));
+            Map<Integer, String> headerMap = new HashMap<>();
+            for (int i = 0; i < headers.size(); i++) {
+                headerMap.put(i, normalizeHeader(headers.get(i)));
+            }
+            List<UploadedBar> result = new ArrayList<>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                List<String> values = parseDelimitedLine(line, delimiter.charAt(0));
+                Map<String, String> row = new HashMap<>();
+                for (int i = 0; i < values.size(); i++) {
+                    String key = headerMap.get(i);
+                    if (key != null) {
+                        row.put(key, values.get(i));
+                    }
+                }
+                UploadedBar item = toUploadedBar(row);
+                if (item != null) {
+                    result.add(item);
+                }
+            }
+            return result;
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("无法读取上传的历史数据文件", ex);
+        }
+    }
+
+    private Map<String, Object> jsonToMap(JsonNode node) {
+        Map<String, Object> result = new HashMap<>();
+        node.fields().forEachRemaining(entry -> result.put(normalizeHeader(entry.getKey()), entry.getValue().asText()));
+        return result;
+    }
+
+    private UploadedBar toUploadedBar(Map<String, ?> row) {
+        String time = firstValue(row, Set.of("time", "datetime", "date", "trade_time", "trading_time", "时间", "日期"));
+        Double open = parseDouble(firstValue(row, Set.of("open", "openprice", "开盘", "开盘价")));
+        Double high = parseDouble(firstValue(row, Set.of("high", "最高", "最高价")));
+        Double low = parseDouble(firstValue(row, Set.of("low", "最低", "最低价")));
+        Double close = parseDouble(firstValue(row, Set.of("close", "收盘", "收盘价", "lastprice", "最新价")));
+        Double volume = parseDouble(firstValue(row, Set.of("volume", "vol", "成交量", "成交总量")));
+        Double amount = parseDouble(firstValue(row, Set.of("amount", "成交额", "成交金额")));
+        if (time.isBlank() || open == null || high == null || low == null || close == null) {
+            return null;
+        }
+        Double changePercent = parseDouble(firstValue(row, Set.of("changepercent", "pct_chg", "涨跌幅")));
+        Double amplitudePercent = parseDouble(firstValue(row, Set.of("amplitudepercent", "amplitude", "振幅")));
+        return new UploadedBar(
+                normalizeTimeValue(time),
+                open,
+                high,
+                low,
+                close,
+                volume == null ? 0.0 : volume,
+                amount == null ? 0.0 : amount,
+                trimToEmpty(firstValue(row, Set.of("stockcode", "code", "symbol", "股票代码", "证券代码"))),
+                trimToEmpty(firstValue(row, Set.of("stockname", "name", "股票名称", "证券名称"))),
+                changePercent,
+                amplitudePercent
+        );
+    }
+
+    private String firstValue(Map<String, ?> row, Set<String> aliases) {
+        for (Map.Entry<String, ?> entry : row.entrySet()) {
+            if (aliases.contains(normalizeHeader(entry.getKey()))) {
+                return trimToEmpty(String.valueOf(entry.getValue()));
+            }
+        }
+        return "";
+    }
+
+    private String detectDelimiter(String line) {
+        if (line.contains("\t")) {
+            return "\t";
+        }
+        if (line.contains(",")) {
+            return ",";
+        }
+        return ",";
+    }
+
+    private List<String> parseDelimitedLine(String line, char delimiter) {
+        List<String> values = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+            if (ch == delimiter && !inQuotes) {
+                values.add(current.toString().trim());
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        values.add(current.toString().trim());
+        return values;
+    }
+
+    private String normalizeHeader(String value) {
+        return trimToEmpty(value).toLowerCase(Locale.ROOT).replace(" ", "").replace("_", "");
+    }
+
+    private String trimToEmpty(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private Double parseDouble(String value) {
+        String text = trimToEmpty(value).replace(",", "").replace("%", "");
+        if (text.isBlank() || text.equalsIgnoreCase("null") || text.equalsIgnoreCase("nan")) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String normalizeTimeValue(String value) {
+        String text = trimToEmpty(value);
+        if (text.length() >= 19) {
+            return text.substring(0, 19).replace('T', ' ');
+        }
+        if (text.length() == 8 && text.chars().allMatch(Character::isDigit)) {
+            return text;
+        }
+        return text.replace('T', ' ');
+    }
+
+    private String sanitizeStockCode(String value) {
+        String digits = trimToEmpty(value).replaceAll("\\D", "");
+        return digits.length() == 6 ? digits : "";
+    }
+
+    private String inferCodeFromFilename(String filename) {
+        if (filename == null) {
+            return "";
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d{6})").matcher(filename);
+        return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private String inferNameFromFilename(String filename) {
+        if (filename == null) {
+            return "";
+        }
+        String base = filename.replaceFirst("\\.[^.]+$", "");
+        return base.length() > 40 ? base.substring(0, 40) : base;
+    }
+
+    private String normalizeTimeframe(String value) {
+        String text = trimToEmpty(value).toLowerCase(Locale.ROOT);
+        if (Set.of("1", "5", "15", "30", "60", "day").contains(text)) {
+            return text;
+        }
+        throw new IllegalArgumentException("仅支持 1/5/15/30/60/day 周期");
+    }
+
+    private String timeframeLabel(String timeframe) {
+        return switch (timeframe) {
+            case "1" -> "1分钟";
+            case "5" -> "5分钟";
+            case "15" -> "15分钟";
+            case "30" -> "30分钟";
+            case "60" -> "60分钟";
+            default -> "日K";
+        };
+    }
+
+    private ObjectNode summarizeBars(List<StockAiAnalysisResponse.CandleBar> bars) {
+        if (bars.isEmpty()) {
+            return objectMapper.createObjectNode();
+        }
+        double rangeHigh = bars.stream().mapToDouble(StockAiAnalysisResponse.CandleBar::high).max().orElse(0.0);
+        double rangeLow = bars.stream().mapToDouble(StockAiAnalysisResponse.CandleBar::low).min().orElse(0.0);
+        double avgVolume = bars.stream().mapToDouble(StockAiAnalysisResponse.CandleBar::volume).average().orElse(0.0);
+        int recentCount = Math.max(3, Math.min(12, bars.size() / 5 == 0 ? 1 : bars.size() / 5));
+        List<StockAiAnalysisResponse.CandleBar> recent = bars.subList(Math.max(0, bars.size() - recentCount), bars.size());
+        List<StockAiAnalysisResponse.CandleBar> previous = bars.subList(Math.max(0, bars.size() - recentCount * 2), Math.max(0, bars.size() - recentCount));
+        double recentAvg = recent.stream().mapToDouble(StockAiAnalysisResponse.CandleBar::volume).average().orElse(0.0);
+        double previousAvg = previous.isEmpty() ? recentAvg : previous.stream().mapToDouble(StockAiAnalysisResponse.CandleBar::volume).average().orElse(recentAvg);
+        double ratio = previousAvg == 0 ? 1.0 : recentAvg / previousAvg;
+        StockAiAnalysisResponse.CandleBar first = bars.get(0);
+        StockAiAnalysisResponse.CandleBar latest = bars.get(bars.size() - 1);
+        return objectMapper.createObjectNode()
+                .put("windowStart", first.time())
+                .put("windowEnd", latest.time())
+                .put("latestPrice", latest.close())
+                .put("periodChangePercent", first.open() == 0 ? 0.0 : ((latest.close() - first.open()) / first.open()) * 100)
+                .put("rangeHigh", rangeHigh)
+                .put("rangeLow", rangeLow)
+                .put("averageVolume", avgVolume)
+                .put("recentVolumeRatio", ratio);
+    }
+
+    private List<String> buildSignals(List<StockAiAnalysisResponse.CandleBar> bars) {
+        if (bars.size() < 5) {
+            return List.of("样本K线较少，先以区间高低点和量能变化做基础观察。");
+        }
+        StockAiAnalysisResponse.CandleBar latest = bars.get(bars.size() - 1);
+        StockAiAnalysisResponse.CandleBar previous = bars.get(bars.size() - 2);
+        List<StockAiAnalysisResponse.CandleBar> recent = bars.subList(Math.max(0, bars.size() - 5), bars.size());
+        double recentHigh = recent.subList(0, recent.size() - 1).stream().mapToDouble(StockAiAnalysisResponse.CandleBar::high).max().orElse(latest.high());
+        double recentLow = recent.subList(0, recent.size() - 1).stream().mapToDouble(StockAiAnalysisResponse.CandleBar::low).min().orElse(latest.low());
+        double avgVolume = recent.subList(0, recent.size() - 1).stream().mapToDouble(StockAiAnalysisResponse.CandleBar::volume).average().orElse(latest.volume());
+        List<String> signals = new ArrayList<>();
+        if (latest.close() > recentHigh && latest.volume() > avgVolume * 1.2) {
+            signals.add("最近一根K线放量突破短线区间高点，属于偏强的价格接受。");
+        }
+        if (latest.close() < recentLow && latest.volume() > avgVolume * 1.2) {
+            signals.add("最近一根K线放量跌破短线区间低点，说明抛压释放更主动。");
+        }
+        if (latest.close() > latest.open() && latest.close() >= latest.high() - (latest.high() - latest.low()) * 0.2) {
+            signals.add("K线收在高位区域，买方在本周期结束前保持了主导。");
+        }
+        if (latest.close() < latest.open() && latest.close() <= latest.low() + (latest.high() - latest.low()) * 0.2) {
+            signals.add("K线收在低位区域，说明尾段承接偏弱。");
+        }
+        if (latest.high() > previous.high() && latest.close() < previous.close()) {
+            signals.add("出现冲高回落迹象，追价的性价比下降，需要等待再次确认。");
+        }
+        if (latest.low() < previous.low() && latest.close() > previous.close()) {
+            signals.add("下探后被快速收回，说明低位承接存在。");
+        }
+        return signals.isEmpty() ? List.of("当前更偏区间震荡，重点观察高低点是否被有效突破。") : signals;
+    }
+
+    private record UploadedBar(
+            String time,
+            double open,
+            double high,
+            double low,
+            double close,
+            double volume,
+            double amount,
+            String stockCode,
+            String stockName,
+            Double changePercent,
+            Double amplitudePercent
+    ) {
     }
 
     private Double nullableDouble(JsonNode node) {

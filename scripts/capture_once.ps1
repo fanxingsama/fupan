@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $backendDir = Join-Path $projectRoot "backend"
 $pythonExe = Join-Path $backendDir ".venv\Scripts\python.exe"
-$collector = Join-Path $backendDir "scripts\collect_akshare.py"
+$collector = Join-Path $backendDir "scripts\collect_tushare.py"
 $dataDir = Join-Path $backendDir "data"
 
 if (-not (Test-Path $pythonExe)) {
@@ -19,8 +19,6 @@ $psi.FileName = $pythonExe
 $null = $psi.ArgumentList.Add($collector)
 $null = $psi.ArgumentList.Add("--date")
 $null = $psi.ArgumentList.Add($tradeDate)
-$null = $psi.ArgumentList.Add("--sleep")
-$null = $psi.ArgumentList.Add("1.2")
 $psi.WorkingDirectory = $backendDir
 $psi.UseShellExecute = $false
 $psi.RedirectStandardOutput = $true

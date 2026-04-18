@@ -3,6 +3,7 @@ C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\config\R
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\config\RecapProperties.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\config\TradeJournalProperties.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\controller\AiChatController.java
+C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\controller\ApiExceptionHandler.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\controller\RecapController.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\controller\StockAiAnalysisController.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\controller\TradeJournalController.java
@@ -14,6 +15,7 @@ C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\Ai
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\AiChatResponse.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\AiInsight.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\AiSummary.java
+C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\ApiErrorResponse.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\BoardIndexSnapshot.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\CaptureRequest.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\DailyRecapReport.java
@@ -23,7 +25,6 @@ C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\Ma
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\RecapDetailResponse.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\RecapListItem.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\SectorRecord.java
-C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\StockAiAnalysisRequest.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\StockAiAnalysisResponse.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\StockRecord.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\TradeImportResponse.java
@@ -32,9 +33,9 @@ C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\Tr
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\TradeRecord.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\TrendPoint.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\model\UserStockAnalysisResponse.java
-C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\AkshareMarketRecapProvider.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\MarketRecapProvider.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\MockMarketRecapProvider.java
+C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\provider\TushareMarketRecapProvider.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiBriefingService.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiChatService.java
 C:\Users\myl\Desktop\fupan\backend\src\main\java\com\meirifupan\backend\service\AiEndpointResolver.java

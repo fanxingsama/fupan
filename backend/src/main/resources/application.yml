@@ -17,9 +17,9 @@ spring:
 
 recap:
   storage-root: data
-  provider: akshare
+  provider: tushare
   python-executable: .venv/Scripts/python.exe
-  collector-script: scripts/collect_akshare.py
+  collector-script: scripts/collect_tushare.py
   intelligence-script: scripts/collect_market_intelligence.py
   sleep-seconds: 1.2
 

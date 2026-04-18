@@ -13,42 +13,27 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * AKShare 数据提供者 —— 通过 Python 子进程调用 AKShare 采集脟本来获取真实市场数据。
- * <p>
- * 工作原理：
- * <ol>
- *   <li>Java 层通过 ProcessBuilder 拉起 Python 采集脚本（scripts/collect_akshare.py）</li>
- *   <li>Python 脚本通过 AKShare 库访问东方财富等接口，拉取涨停、跌停、板块等数据</li>
- *   <li>Python 将采集结果以 JSON 格式输出到 stdout</li>
- *   <li>Java 层解析 stdout 得到完整的 DailyRecapReport</li>
- * </ol>
- * 采集过程中会自动移除代理环境变量，避免上游接口被本机代理影响。
- */
 @Component
-public class AkshareMarketRecapProvider implements MarketRecapProvider {
+public class TushareMarketRecapProvider implements MarketRecapProvider {
 
     private final RecapProperties properties;
     private final ObjectMapper objectMapper;
 
-    public AkshareMarketRecapProvider(RecapProperties properties, ObjectMapper objectMapper) {
+    public TushareMarketRecapProvider(RecapProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public String name() {
-        return "akshare";
+        return "tushare";
     }
 
-    /**
-     * Java 层负责拉起 Python 采集脚本并解析 stdout 返回的完整复盘 JSON。
-     */
     @Override
     public DailyRecapReport capture(LocalDate tradeDate) {
         Path scriptPath = Path.of(properties.collectorScript()).toAbsolutePath();
         if (!Files.exists(scriptPath)) {
-            throw new IllegalStateException("Collector script not found: " + scriptPath);
+            throw new IllegalStateException("Tushare 采集脚本不存在: " + scriptPath);
         }
 
         List<String> command = new ArrayList<>();
@@ -65,7 +50,6 @@ public class AkshareMarketRecapProvider implements MarketRecapProvider {
         processBuilder.directory(scriptPath.getParent().toFile());
         processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
         processBuilder.environment().put("PYTHONUTF8", "1");
-        // 某些上游网页接口会受本机代理影响，这里统一移除代理变量后再采集。
         processBuilder.environment().remove("HTTP_PROXY");
         processBuilder.environment().remove("HTTPS_PROXY");
         processBuilder.environment().remove("ALL_PROXY");
@@ -81,14 +65,19 @@ public class AkshareMarketRecapProvider implements MarketRecapProvider {
             String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
             int exitCode = process.waitFor();
             if (exitCode != 0) {
-                throw new IllegalStateException("Collector failed: " + stderr);
+                String detail = stderr.isBlank() ? "未返回具体错误。" : stderr.trim();
+                throw new IllegalStateException("Tushare 采集失败，请检查 token、代理地址或接口权限。详情: " + detail);
             }
-            return objectMapper.readValue(stdout, DailyRecapReport.class);
+            DailyRecapReport report = objectMapper.readValue(stdout, DailyRecapReport.class);
+            if (report.firstLimitToday() == null || report.firstLimitToday().isEmpty()) {
+                throw new IllegalStateException("Tushare 未返回有效复盘数据，请检查当日权限或代理接口状态。");
+            }
+            return report;
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to execute collector script.", e);
+            throw new IllegalStateException("无法执行 Tushare 采集脚本。", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Collector execution interrupted.", e);
+            throw new IllegalStateException("Tushare 采集中断。", e);
         }
     }
 }

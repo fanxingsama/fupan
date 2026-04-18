@@ -28,7 +28,14 @@ async function request(url, options = {}) {
   const response = await fetch(url, { ...options, headers })
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || `请求失败: ${response.status}`)
+    let message = text
+    try {
+      const payload = JSON.parse(text)
+      message = payload.message || payload.error || text
+    } catch (_) {
+      message = text
+    }
+    throw new Error(message || `请求失败: ${response.status}`)
   }
 
   const contentType = response.headers.get('content-type') || ''
@@ -119,10 +126,15 @@ export function analyzeUserStockImages(files) {
   })
 }
 
-export function analyzeStockWithAi(stockCode, timeframe) {
+export function analyzeStockWithAi(file, timeframe, stockCode = '', stockName = '') {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('timeframe', timeframe)
+  if (stockCode) formData.append('stockCode', stockCode)
+  if (stockName) formData.append('stockName', stockName)
   return request(STOCK_AI_ANALYSIS_BASE, {
     method: 'POST',
-    body: JSON.stringify({ stockCode, timeframe })
+    body: formData
   })
 }
 

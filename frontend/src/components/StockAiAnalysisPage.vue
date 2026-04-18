@@ -2,25 +2,32 @@
   <div class="stock-ai-page">
     <div class="page-header-block">
       <p class="eyebrow">AI分析个股</p>
-      <h2>输入股票代码，用分钟级或日K量价关系学习买卖点</h2>
+      <h2>上传历史K线数据，让 AI 基于你本地导出的历史数据分析量价结构</h2>
       <p class="muted">
-        当前版本默认使用 AKShare 抓取 K 线，支持 1/5/15/30/60 分钟和日K。
-        分析只看裸K与成交量，不引入基本面与消息面，更适合拿来训练节奏感和复盘思路。
+        支持上传 <code>csv / tsv / txt / json</code>。系统会优先识别常见的中英文列名，例如
+        <code>time/open/high/low/close/volume/amount</code> 或
+        <code>时间/开盘/最高/最低/收盘/成交量/成交额</code>。
+        如果文件里没有股票代码或名称，你也可以手动补充。
       </p>
     </div>
 
     <article class="panel">
       <div class="section-head">
         <div>
-          <h2>分析参数</h2>
-          <p class="muted section-subtitle">示例：000001、600519、300750</p>
+          <h2>上传参数</h2>
+          <p class="muted section-subtitle">建议优先上传 QMT 导出的单只个股历史K线文件</p>
         </div>
       </div>
 
       <div class="stock-ai-form">
         <label>
-          <span class="field-label">股票代码</span>
-          <input v-model.trim="stockCode" maxlength="6" placeholder="输入 6 位股票代码" @keyup.enter="submit" />
+          <span class="field-label">历史数据文件</span>
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".csv,.tsv,.txt,.json,application/json,text/csv,text/plain"
+            @change="handleFileChange"
+          />
         </label>
 
         <label>
@@ -38,16 +45,34 @@
             </button>
           </div>
         </label>
+
+        <label>
+          <span class="field-label">股票代码（可选）</span>
+          <input v-model.trim="stockCode" maxlength="6" placeholder="文件里没有代码时再填写" />
+        </label>
+
+        <label>
+          <span class="field-label">股票名称（可选）</span>
+          <input v-model.trim="stockName" maxlength="20" placeholder="文件里没有名称时再填写" />
+        </label>
       </div>
 
       <div class="import-row stock-ai-actions">
         <div class="analysis-selection-summary">
           <strong>{{ currentSelectionLabel }}</strong>
-          <span class="muted">默认分析最近一段同周期K线，AI会聚焦量价结构与学习型买卖点。</span>
+          <span class="muted">上传后会直接基于文件中的历史K线做分析，不再联网抓取个股数据。</span>
         </div>
         <button :disabled="analyzing || !canSubmit" @click="submit">
           {{ analyzing ? '分析中...' : '开始分析' }}
         </button>
+      </div>
+
+      <div v-if="selectedFile" class="analysis-preview-grid">
+        <div class="preview-card">
+          <strong>{{ selectedFile.name }}</strong>
+          <span>{{ formatFileSize(selectedFile.size) }}</span>
+          <small>{{ timeframeLabel }}</small>
+        </div>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -97,7 +122,7 @@
         <div class="section-head">
           <div>
             <h2>K线与成交量</h2>
-            <p class="muted section-subtitle">展示最近 {{ result.candles.length }} 根K线，帮助你对照 AI 结论复盘。</p>
+            <p class="muted section-subtitle">展示最近 {{ result.candles.length }} 根K线，帮助你对照 AI 结论复盘</p>
           </div>
         </div>
         <div ref="klineChart" class="chart-box chart-box-large"></div>
@@ -152,7 +177,9 @@ export default {
   name: 'StockAiAnalysisPage',
   data() {
     return {
+      selectedFile: null,
       stockCode: '',
+      stockName: '',
       timeframe: '15',
       analyzing: false,
       error: '',
@@ -170,11 +197,13 @@ export default {
   },
   computed: {
     canSubmit() {
-      return /^\d{6}$/.test(this.stockCode)
+      return !!this.selectedFile
+    },
+    timeframeLabel() {
+      return this.timeframeOptions.find(item => item.value === this.timeframe)?.label || ''
     },
     currentSelectionLabel() {
-      const option = this.timeframeOptions.find(item => item.value === this.timeframe)
-      return `${this.stockCode || '未填写股票'} / ${option?.label || ''}`
+      return `${this.stockCode || '文件识别或未填写'} / ${this.stockName || '文件识别或未填写'} / ${this.timeframeLabel}`
     }
   },
   mounted() {
@@ -188,15 +217,23 @@ export default {
     }
   },
   methods: {
+    handleFileChange(event) {
+      const [file] = Array.from(event.target.files || [])
+      this.selectedFile = file || null
+      this.result = null
+      this.error = ''
+    },
     async submit() {
-      if (!this.canSubmit) {
-        this.error = '请输入 6 位股票代码'
+      if (!this.selectedFile) {
+        this.error = '请先上传历史数据文件'
         return
       }
       this.analyzing = true
       this.error = ''
       try {
-        this.result = await analyzeStockWithAi(this.stockCode, this.timeframe)
+        this.result = await analyzeStockWithAi(this.selectedFile, this.timeframe, this.stockCode, this.stockName)
+        this.stockCode = this.result.stockCode || this.stockCode
+        this.stockName = this.result.stockName || this.stockName
         this.$nextTick(() => this.renderChart())
       } catch (error) {
         this.error = error.message
@@ -212,6 +249,12 @@ export default {
     },
     formatRatio(value) {
       return value == null ? '--' : `${Number(value).toFixed(2)}x`
+    },
+    formatFileSize(value) {
+      const numeric = Number(value || 0)
+      if (numeric >= 1024 * 1024) return `${(numeric / (1024 * 1024)).toFixed(2)} MB`
+      if (numeric >= 1024) return `${(numeric / 1024).toFixed(1)} KB`
+      return `${numeric} B`
     },
     formatVolume(value) {
       if (value == null) return '--'
