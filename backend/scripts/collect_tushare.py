@@ -7,6 +7,11 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
+try:
+    import akshare as ak  # type: ignore
+except ImportError:  # pragma: no cover
+    ak = None
+
 from recap_collect_common import (
     build_jiuyangongshe_reason_map,
     build_sector_fallback,
@@ -156,6 +161,162 @@ def map_limit_rows(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
         )
     mapped.sort(key=lambda item: int(item.get("boardHeight") or "0"), reverse=True)
     return mapped
+
+
+def safe_ak_records(func: Callable[..., Any], **kwargs: Any) -> list[dict[str, Any]]:
+    if ak is None:
+        return []
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            df = func(**kwargs)
+        if df is None or getattr(df, "empty", False):
+            return []
+        return json.loads(df.to_json(orient="records", force_ascii=False))
+    except Exception:
+        return []
+
+
+def parse_board_stat(value: Any) -> str:
+    text = clean_text(value)
+    if not text:
+        return ""
+    if "/" in text:
+        text = clean_text(text.split("/", 1)[0])
+    try:
+        return str(int(float(text)))
+    except Exception:
+        return ""
+
+
+def map_ak_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    mapped: list[dict[str, str]] = []
+    for row in rows:
+        board_height = parse_board_stat(row.get("连板数")) or parse_board_stat(row.get("涨停统计")) or "1"
+        industry = clean_text(row.get("所属行业"))
+        mapped.append(
+            stock_record(
+                code=row.get("代码"),
+                name=row.get("名称"),
+                board_height=board_height,
+                change_percent=format_percent(row.get("涨跌幅")),
+                price=format_price(row.get("最新价")),
+                industry=industry,
+                concept=industry,
+                amount=format_amount(row.get("成交额")),
+                float_market_value=format_amount(row.get("流通市值")),
+                reason=clean_reason_text(row.get("涨停统计")),
+                seal_amount=format_amount(row.get("封板资金")),
+                turnover_rate=format_percent(row.get("换手率")),
+                amplitude=format_percent(row.get("振幅")),
+                extra_tag=format_tushare_time(row.get("最后封板时间") or row.get("首次封板时间")),
+            )
+        )
+    mapped.sort(key=lambda item: int(item.get("boardHeight") or "0"), reverse=True)
+    return mapped
+
+
+def map_ak_previous_limit_up(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    for row in rows:
+        industry = clean_text(row.get("所属行业"))
+        result.append(
+            stock_record(
+                code=row.get("代码"),
+                name=row.get("名称"),
+                board_height=parse_board_stat(row.get("昨日连板数")),
+                change_percent=format_percent(row.get("涨跌幅")),
+                price=format_price(row.get("最新价")),
+                industry=industry,
+                concept=industry,
+                amount=format_amount(row.get("成交额")),
+                float_market_value=format_amount(row.get("流通市值")),
+                reason=clean_reason_text(row.get("涨停统计")),
+                turnover_rate=format_percent(row.get("换手率")),
+                amplitude=format_percent(row.get("振幅")),
+                extra_tag=format_tushare_time(row.get("昨日封板时间")),
+            )
+        )
+    return result
+
+
+def map_ak_broken_limit(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    for row in rows:
+        industry = clean_text(row.get("所属行业"))
+        result.append(
+            stock_record(
+                code=row.get("代码"),
+                name=row.get("名称"),
+                change_percent=format_percent(row.get("涨跌幅")),
+                price=format_price(row.get("最新价")),
+                industry=industry,
+                concept=industry,
+                amount=format_amount(row.get("成交额")),
+                float_market_value=format_amount(row.get("流通市值")),
+                reason=clean_reason_text(row.get("涨停统计")),
+                turnover_rate=format_percent(row.get("换手率")),
+                amplitude=format_percent(row.get("振幅")),
+                extra_tag=format_tushare_time(row.get("首次封板时间")),
+            )
+        )
+    return result
+
+
+def map_ak_limit_down(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    for row in rows:
+        industry = clean_text(row.get("所属行业"))
+        result.append(
+            stock_record(
+                code=row.get("代码"),
+                name=row.get("名称"),
+                board_height=parse_board_stat(row.get("连续跌停")),
+                change_percent=format_percent(row.get("涨跌幅")),
+                price=format_price(row.get("最新价")),
+                industry=industry,
+                concept=industry,
+                amount=format_amount(row.get("成交额")),
+                float_market_value=format_amount(row.get("流通市值")),
+                reason=clean_reason_text(f"开板次数 {clean_text(row.get('开板次数'))}"),
+                seal_amount=format_amount(row.get("封单资金")),
+                turnover_rate=format_percent(row.get("换手率")),
+                extra_tag=format_tushare_time(row.get("最后封板时间")),
+            )
+        )
+    return result
+
+
+def load_limit_pool_data(
+    pro: Any,
+    trade_date: str,
+    previous_trade_date: str | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], str]:
+    limit_up_rows = safe_df_records(pro.limit_list_d, trade_date=trade_date, limit_type="U")
+    previous_limit_up_rows = safe_df_records(pro.limit_list_d, trade_date=previous_trade_date, limit_type="U") if previous_trade_date else []
+    broken_limit_rows = safe_df_records(pro.limit_list_d, trade_date=trade_date, limit_type="Z")
+    limit_down_rows = safe_df_records(pro.limit_list_d, trade_date=trade_date, limit_type="D")
+    previous_broken_rows = safe_df_records(pro.limit_list_d, trade_date=previous_trade_date, limit_type="Z") if previous_trade_date else []
+
+    if limit_up_rows or broken_limit_rows or limit_down_rows:
+        return limit_up_rows, previous_limit_up_rows, broken_limit_rows, limit_down_rows, previous_broken_rows, "tushare"
+
+    ak_limit_up_rows = safe_ak_records(ak.stock_zt_pool_em, date=trade_date) if ak else []
+    ak_previous_limit_up_rows = safe_ak_records(ak.stock_zt_pool_previous_em, date=trade_date) if ak else []
+    ak_broken_limit_rows = safe_ak_records(ak.stock_zt_pool_zbgc_em, date=trade_date) if ak else []
+    ak_limit_down_rows = safe_ak_records(ak.stock_zt_pool_dtgc_em, date=trade_date) if ak else []
+    ak_previous_broken_rows = safe_ak_records(ak.stock_zt_pool_zbgc_em, date=previous_trade_date) if ak and previous_trade_date else []
+
+    if ak_limit_up_rows or ak_broken_limit_rows or ak_limit_down_rows:
+        return (
+            ak_limit_up_rows,
+            ak_previous_limit_up_rows,
+            ak_broken_limit_rows,
+            ak_limit_down_rows,
+            ak_previous_broken_rows,
+            "akshare",
+        )
+
+    return limit_up_rows, previous_limit_up_rows, broken_limit_rows, limit_down_rows, previous_broken_rows, "tushare"
 
 
 def map_first_limit(rows: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -456,27 +617,24 @@ def main() -> None:
     market_rows = load_market_snapshot(pro, trade_date_em, stock_basic_map)
     market_index = build_market_index(market_rows)
 
-    limit_up_rows = safe_df_records(pro.limit_list_d, trade_date=trade_date_em, limit_type="U")
-    previous_limit_up_rows = safe_df_records(pro.limit_list_d, trade_date=previous_trade_date_em, limit_type="U") if previous_trade_date_em else []
-    broken_limit_rows = safe_df_records(pro.limit_list_d, trade_date=trade_date_em, limit_type="Z")
-    limit_down_rows = safe_df_records(pro.limit_list_d, trade_date=trade_date_em, limit_type="D")
+    limit_up_rows, previous_limit_up_rows, broken_limit_rows, limit_down_rows, previous_broken_rows, limit_pool_source = load_limit_pool_data(
+        pro,
+        trade_date_em,
+        previous_trade_date_em,
+    )
     concept_rows = safe_df_records(pro.limit_cpt_list, trade_date=trade_date_em)
-
-    previous_broken_rows: list[dict[str, Any]] = []
-    if previous_trade_date_em:
-        previous_broken_rows = safe_df_records(pro.limit_list_d, trade_date=previous_trade_date_em, limit_type="Z")
 
     jiuyangongshe_reason_map = build_jiuyangongshe_reason_map(
         f"{trade_date_em[:4]}-{trade_date_em[4:6]}-{trade_date_em[6:]}"
     )
 
-    limit_up_all = map_limit_rows(limit_up_rows)
+    limit_up_all = map_ak_limit_up(limit_up_rows) if limit_pool_source == "akshare" else map_limit_rows(limit_up_rows)
     first_limit_today = map_first_limit(limit_up_all)
     limit_up_today = map_consecutive_limit(limit_up_all)
-    broken_limit_today = map_broken_limit(broken_limit_rows)
-    broken_limit_yesterday_feedback = map_previous_broken_limit(previous_broken_rows, market_index)
-    limit_down_today = map_limit_down(limit_down_rows)
-    previous_limit_feedback_all = map_previous_limit_feedback(previous_limit_up_rows, market_index)
+    broken_limit_today = map_ak_broken_limit(broken_limit_rows) if limit_pool_source == "akshare" else map_broken_limit(broken_limit_rows)
+    broken_limit_yesterday_feedback = map_ak_broken_limit(previous_broken_rows) if limit_pool_source == "akshare" else map_previous_broken_limit(previous_broken_rows, market_index)
+    limit_down_today = map_ak_limit_down(limit_down_rows) if limit_pool_source == "akshare" else map_limit_down(limit_down_rows)
+    previous_limit_feedback_all = map_ak_previous_limit_up(previous_limit_up_rows) if limit_pool_source == "akshare" else map_previous_limit_feedback(previous_limit_up_rows, market_index)
     previous_limit_up_feedback = map_consecutive_limit(previous_limit_feedback_all)
     previous_first_limit_feedback = map_first_limit(previous_limit_feedback_all)
 
@@ -515,7 +673,7 @@ def main() -> None:
         "top10DayGainGemStar": map_top_10_day(history_change_map, is_gem_star, market_index),
         "top10DayGainMainBoard": map_top_10_day(history_change_map, is_main_board, market_index),
         "firstLimitSectorFocus": first_limit_focus(first_limit_today),
-        "dataSource": "tushare+jiuyangongshe",
+        "dataSource": f"tushare+{limit_pool_source}+jiuyangongshe",
         "notes": "行情主数据来自 Tushare；涨停原因优先通过韭研公社已登录会话抓取“全部异动解析”页数据；若韭研会话过期，需要重新登录专用会话。分钟级个股分析接口未切换，因为当前购买权限不包含 Tushare 分钟线接口。",
     }
     print(json.dumps(report, ensure_ascii=False))

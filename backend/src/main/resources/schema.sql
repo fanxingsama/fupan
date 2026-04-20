@@ -51,3 +51,11 @@ CREATE TABLE IF NOT EXISTS ai_request_cache (
 
 CREATE INDEX IF NOT EXISTS idx_ai_request_cache_scenario_created_at
     ON ai_request_cache(scenario, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS theme_tracking (
+    trade_date TEXT NOT NULL,
+    theme_name TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (trade_date, theme_name)
+);

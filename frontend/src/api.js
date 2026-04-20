@@ -101,6 +101,23 @@ export function getMarketIntelligence(tradeDate, refresh = false) {
   return cachedGet(`${RECAP_BASE}/${tradeDate}/market-intelligence?refresh=${refresh}`, { refresh })
 }
 
+export function listThemeTracking(tradeDate, refresh = false) {
+  return cachedGet(`${RECAP_BASE}/${tradeDate}/theme-tracking?refresh=${refresh}`, { refresh })
+}
+
+export function getThemeTrackingDetail(tradeDate, themeName, refresh = false) {
+  return cachedGet(`${RECAP_BASE}/${tradeDate}/theme-tracking/${encodeURIComponent(themeName)}?refresh=${refresh}`, { refresh })
+}
+
+export function refreshThemeTracking(tradeDate) {
+  return request(`${RECAP_BASE}/${tradeDate}/theme-tracking/refresh`, {
+    method: 'POST'
+  }).then(result => {
+    invalidateCache([`${RECAP_BASE}/${tradeDate}/theme-tracking`])
+    return result
+  })
+}
+
 export function listTradeJournal() {
   return cachedGet(TRADE_JOURNAL_BASE)
 }

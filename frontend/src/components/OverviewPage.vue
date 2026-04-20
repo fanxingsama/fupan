@@ -6,6 +6,8 @@
       <p class="muted">{{ tradePlan?.headline || recap.notes }}</p>
     </div>
 
+    <ThemeTrackingPanel :trade-date="recap.tradeDate" />
+
     <section v-if="boardIndexes.length" class="board-index-grid">
       <article v-for="item in boardIndexes" :key="item.key || item.label" class="board-index-card">
         <span class="dash-label">{{ item.label }}</span>
@@ -312,10 +314,11 @@ import {
 const AiBriefingPanel = () => import('./AiBriefingPanel.vue')
 const AiInsightPanel = () => import('./AiInsightPanel.vue')
 const AiSummaryPanel = () => import('./AiSummaryPanel.vue')
+const ThemeTrackingPanel = () => import('./ThemeTrackingPanel.vue')
 
 export default {
   name: 'OverviewPage',
-  components: { AiBriefingPanel, AiInsightPanel, AiSummaryPanel },
+  components: { AiBriefingPanel, AiInsightPanel, AiSummaryPanel, ThemeTrackingPanel },
   props: {
     recap: { type: Object, default: null },
     indicators: { type: Object, default: null },
